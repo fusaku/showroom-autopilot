@@ -4,7 +4,7 @@ import logging
 import sys
 import cx_Oracle
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta 
 from logger_config import setup_logger
 from config import (
     ENABLED_MEMBERS, 
@@ -20,6 +20,9 @@ from config import (
     DB_TABLE,
     TNS_ALIAS
 )
+# ✅ 修改配置常量：TS文件多久没有更新视为录制停止，改为 60 秒
+MAX_TS_INACTIVE_TIME = 60 # 60 秒
+
 os.environ["TNS_ADMIN"] = WALLET_DIR
 
 
@@ -98,56 +101,114 @@ def read_live_status():
         return False, None
 
 def get_latest_subfolder(parent: Path):
-    """获取当前成员的最新录制子文件夹，通过匹配日期和成员英文名"""
+    """
+    ✅ 跨日修改: 检查今天和昨天的日期字符串，以支持跨日直播
+    """
     
     # 获取当前监控成员的英文名用于文件夹匹配
-    # 这里的 MEMBER 变量是在脚本启动时根据 MEMBER_ID 或默认值设置的
     member_name_in_folder = MEMBER.get('name_en', MEMBER['id']) 
     match_name_lower = member_name_in_folder.lower()
     
-    today_str = datetime.now().strftime("%y%m%d")
+    # ✅ 检查今天和昨天的日期字符串
+    today = datetime.now()
+    yesterday = today - timedelta(days=1)
+    
+    date_strs_to_check = [
+        today.strftime("%y%m%d"),
+        yesterday.strftime("%y%m%d")
+    ]
     
     folders = []
-    for f in parent.iterdir(): 
-        if f.is_dir() and today_str in f.name:
-            folder_name_lower = f.name.lower()
-            
-            # 【核心修改】：检查文件夹名称是否包含成员的英文名
-            if match_name_lower in folder_name_lower:
-                 folders.append(f)
-                 
+    try:
+        for f in parent.iterdir(): 
+            if f.is_dir():
+                folder_name_lower = f.name.lower()
+
+                # 检查文件夹名称是否包含成员的英文名 且 包含今天或昨天的日期
+                is_match = False
+                if match_name_lower in folder_name_lower:
+                    for date_str in date_strs_to_check:
+                        if date_str in folder_name_lower:
+                            is_match = True
+                            break
+                        
+                if is_match:
+                     folders.append(f)
+    except (OSError, PermissionError) as e:  # ✅ 新增这一段
+        logging.error(f"遍历录制目录失败: {e}")
+        return None
+    
     if not folders:
-        logging.warning(f"没有找到包含 {today_str} 和昵称 '{member_name_in_folder}' 的录制文件夹")
+        logging.warning(f"没有找到包含今天/昨天日期和昵称 '{member_name_in_folder}' 的录制文件夹")
         return None
         
     # 返回最新修改时间的文件夹
     return max(folders, key=lambda f: f.stat().st_mtime)
 
 def has_new_ts_files(started_at_unix: int) -> bool:
-    """检查最新文件夹中是否有 .ts 文件，并且有文件的修改时间晚于直播开始时间"""
+    """
+    ✅ 逻辑修改: 检查最新文件夹中是否有 .ts 文件。
+    - 在 GRACEFUL_START_DELAY 之前，无 .ts 文件也返回 True (等待启动)。
+    - 在 GRACEFUL_START_DELAY 之后，检查最新 .ts 文件的修改时间是否在 MAX_TS_INACTIVE_TIME 内。
+    """
     folder = get_latest_subfolder(TS_PARENT_DIR)
+    if folder is None:  # ✅ 尽早检查
+        logging.warning("没有找到任何录制子文件夹")
+        current_time = time.time()
+        time_since_start = current_time - started_at_unix
+        return time_since_start < GRACEFUL_START_DELAY  # 宽限期内放行
+
+    current_time = time.time()
+    time_since_start = current_time - started_at_unix
+    is_graceful_period = time_since_start < GRACEFUL_START_DELAY
+    
     if folder is None:
-        logging.warning("没有找到任何子文件夹")
-        return False
+        logging.warning("没有找到任何录制子文件夹")
+        # 优雅启动期内放行
+        return is_graceful_period
 
-    ts_files = list(folder.glob("*.ts"))
+    try:
+        ts_files = list(folder.glob("*.ts"))
+    except (OSError, PermissionError) as e:
+        logging.error(f"读取 TS 文件列表失败: {e}")
+        return False
+    
+    # 场景 1: 没有 .ts 文件
     if not ts_files:
-        logging.warning(f"文件夹 {folder.name} 中没有任何 .ts 文件")
+        if is_graceful_period:
+            logging.info(f"文件夹 {folder.name} 暂无 .ts 文件，在 GRACEFUL_START_DELAY 内，等待启动...")
+            return True
+        else:
+            # 超过优雅启动期，仍无文件，判断为录制失败
+            logging.warning(f"文件夹 {folder.name} 中没有任何 .ts 文件，且已超过 GRACEFUL_START_DELAY")
+            return False
+
+    # 场景 2: 有 .ts 文件
+    
+    # 原有的 .txt 停止标记仍然是有效的停止信号
+    try:
+        txt_files = list(folder.glob("*.txt"))
+    except (OSError, PermissionError):
+        txt_files = []
+    
+    if txt_files:
+        logging.warning(f"检测到录制停止标志 .txt 文件在 {folder.name} 中")
+        return False
+    try:    
+        latest_ts = max(ts_files, key=lambda f: f.stat().st_mtime)
+        latest_mtime = latest_ts.stat().st_mtime
+    except (FileNotFoundError, OSError) as e:
+        logging.warning(f"获取文件修改时间失败（文件可能被删除）: {e}")
         return False
 
-    txt_files = list(folder.glob("*.txt"))
-    if not txt_files:
-        logging.warning(f"文件夹 {folder.name} 中没有 .txt 文件")
-        return True
-
-    latest_ts = max(ts_files, key=lambda f: f.stat().st_mtime)
-    latest_mtime = latest_ts.stat().st_mtime
-
-    if latest_mtime >= started_at_unix and not txt_files:
-        logging.info(f"检测到新 .ts 文件: {latest_ts.name}，时间: {time.ctime(latest_mtime)}")
+    # 核心判断：检查最新文件修改时间是否在 MAX_TS_INACTIVE_TIME 范围内 (60 秒)
+    time_since_last_write = current_time - latest_mtime
+    
+    if time_since_last_write < MAX_TS_INACTIVE_TIME:
+        logging.info(f"录制正常: 最新 .ts 文件 {latest_ts.name}，更新时间: {time.ctime(latest_mtime)}，间隔 {time_since_last_write:.0f} 秒")
         return True
     else:
-        logging.warning(f"最近的 .ts 文件 {latest_ts.name} 过旧（{time.ctime(latest_mtime)}），可能录制停止")
+        logging.warning(f"录制停止: 最近的 .ts 文件 {latest_ts.name} (更新于 {time.ctime(latest_mtime)}) 太久，已 {time_since_last_write:.0f} 秒未更新，超过 {MAX_TS_INACTIVE_TIME} 秒")
         return False
 
 def restart_service(service_name):
@@ -194,7 +255,7 @@ def restart_loop():
             logging.info(f"{MEMBER['id']} 正在直播中 (已开播 {time_since_start:.1f} 秒),检查录制状态...")
             
             if not has_new_ts_files(started_at):
-                logging.warning("直播中但未检测到新 ts 文件")
+                logging.warning("直播中但未检测到新 ts 文件或录制停止")
                 restart_service(SERVICE_NAME)
             else:
                 logging.info("录制正常")

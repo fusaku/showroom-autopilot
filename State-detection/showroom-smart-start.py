@@ -6,7 +6,7 @@ import cx_Oracle
 import subprocess
 import signal
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta # ✅ 新增导入 timedelta
 from logger_config import setup_logger
 from config import (
     ENABLED_MEMBERS, 
@@ -37,7 +37,8 @@ member_processes = {}  # {member_id: {'process': subprocess, 'last_live': timest
 STOP_DELAY = 300  # 直播结束后5分钟再终止进程
 CHECK_INTERVAL = 1  # 每1秒检查一次所有成员
 # 【新增】文件活跃性检查宽限期（秒），启动后需等待这么久才检查文件是否生成
-FILE_CHECK_GRACE_PERIOD = 60
+# ✅ 此常量 (60秒) 同时作为文件不活动触发重启的阈值
+FILE_CHECK_GRACE_PERIOD = 180
 
 # 清理状态标志
 is_cleaning_up = False
@@ -108,8 +109,8 @@ def get_latest_subfolder(member_id: str):
     """
     获取指定成员的最新子文件夹。
     通过匹配日期和英文名所有部分（忽略队伍或其他额外信息）。
+    ✅ 跨日修改: 检查今天和昨天的日期字符串，以支持跨日直播
     """
-    today_str = datetime.now().strftime("%y%m%d")
     
     # 1. 查找成员的配置信息，获取其英文名 (name_en 字段)
     member_data = next((m for m in ENABLED_MEMBERS if m['id'] == member_id), None)
@@ -120,22 +121,33 @@ def get_latest_subfolder(member_id: str):
     member_name_en = member_data.get('name_en', member_id) 
 
     # 【核心修改】
-    # 将英文名分割成单词部分，并转为小写。例如："Oga Saki" -> ["oga", "saki"]
-    # 这样可以忽略名字中的空格、大小写，以及文件夹中名字周围的 Team 信息
+    # 将英文名分割成单词部分，并转为小写
     name_parts_lower = member_name_en.lower().split()
+    
+    # ✅ 检查今天和昨天的日期字符串
+    today = datetime.now()
+    yesterday = today - timedelta(days=1)
+    
+    date_strs_to_check = [
+        today.strftime("%y%m%d"),
+        yesterday.strftime("%y%m%d")
+    ]
     
     folders = []
     
     # 遍历录制文件的父目录下的所有内容
     try:
         for f in TS_PARENT_DIR.iterdir(): 
-            if f.is_dir() and today_str in f.name:
-                # 文件夹名称转为小写，以便进行不区分大小写的匹配
+            if f.is_dir():
                 folder_name_lower = f.name.lower()
                 
-                # 检查文件夹名称是否包含日期 AND 英文名中的所有单词部分
+                # 1. 检查是否包含英文名中的所有单词部分
                 if all(part in folder_name_lower for part in name_parts_lower):
-                     folders.append(f)
+                    # 2. 检查是否包含今天或昨天的日期
+                    is_date_match = any(date_str in folder_name_lower for date_str in date_strs_to_check)
+                    
+                    if is_date_match:
+                         folders.append(f)
     except Exception as e:
         # 处理可能的权限或路径错误
         logging.error(f"遍历录制目录 {TS_PARENT_DIR} 时出错: {e}")
@@ -143,32 +155,58 @@ def get_latest_subfolder(member_id: str):
                  
     if not folders:
         # 如果未找到任何匹配的文件夹，返回 None
+        logging.warning(f"没有找到包含今天/昨天日期和昵称 '{member_name_en}' 的录制文件夹")
         return None
         
     # 返回最新修改时间（st_mtime）的文件夹
     return max(folders, key=lambda f: f.stat().st_mtime)
 
 def has_new_ts_files(member_id: str, started_at_unix: int) -> bool:
-    """检查是否有新的 ts 文件"""
+    """
+    ✅ 逻辑修改: 检查最新文件夹中是否有 .ts 文件，并使用 FILE_CHECK_GRACE_PERIOD 作为不活动阈值。
+    """
     folder = get_latest_subfolder(member_id)
+    current_time = time.time()
+    
     if folder is None:
+        logging.debug(f"{member_id}: 没有找到任何录制子文件夹")
+        return False
+    
+    try:
+        ts_files = list(folder.glob("*.ts"))
+    except (OSError, PermissionError) as e:
+        logging.error(f"{member_id}: 读取 TS 文件列表失败: {e}")
         return False
 
-    ts_files = list(folder.glob("*.ts"))
     if not ts_files:
+        logging.debug(f"{member_id}: 文件夹 {folder.name} 中没有任何 .ts 文件")
         return False
 
-    txt_files = list(folder.glob("*.txt"))
+    try:
+        txt_files = list(folder.glob("*.txt"))
+    except (OSError, PermissionError):
+        txt_files = []
+    
     if txt_files:  # 有 .txt 文件说明录制已结束
+        logging.warning(f"{member_id}: 检测到录制停止标志 .txt 文件在 {folder.name} 中")
         return False
 
-    latest_ts = max(ts_files, key=lambda f: f.stat().st_mtime)
-    latest_mtime = latest_ts.stat().st_mtime
-
-    if latest_mtime >= started_at_unix:
+    try:
+        latest_ts = max(ts_files, key=lambda f: f.stat().st_mtime)
+        latest_mtime = latest_ts.stat().st_mtime
+    except (FileNotFoundError, OSError) as e:
+        logging.warning(f"{member_id}: 获取文件修改时间失败: {e}")
+        return False
+    time_since_last_write = current_time - latest_mtime
+    
+    # ✅ 核心判断：检查最新文件修改时间是否在 FILE_CHECK_GRACE_PERIOD (60秒) 范围内
+    if time_since_last_write < FILE_CHECK_GRACE_PERIOD: 
+        logging.debug(f"{member_id}: 录制正常，文件 {latest_ts.name} 更新于 {time_since_last_write:.0f}s 前")
         return True
     
-    return False
+    # 文件太旧，认为录制停止/卡死
+    logging.warning(f"{member_id}: 最近的 .ts 文件 {latest_ts.name} (更新于 {time.ctime(latest_mtime)}) 已 {time_since_last_write:.0f} 秒未更新，超过 {FILE_CHECK_GRACE_PERIOD} 秒")
+    return False # 返回 False 触发重启
 
 def start_recording_process(member_id: str):
     """启动录制进程，不再使用多IP分配逻辑"""
@@ -322,14 +360,14 @@ def monitor_all_members():
                     last_restart = member_processes[member_id].get('last_restart', 0)
                     time_since_restart = current_time - last_restart
                     
-                    # 【修改点】检查是否仍在 60 秒宽限期内
+                    # 检查是否仍在 FILE_CHECK_GRACE_PERIOD 宽限期内
                     if time_since_restart < FILE_CHECK_GRACE_PERIOD:
                         # 进程刚启动，不检查文件，继续等待
                         logging.debug(f"{member_id}: 进程刚启动 ({time_since_restart:.0f}s)，等待文件生成")
                     
                     elif not has_new_ts_files(member_id, started_at):
-                        # 进程运行已超过宽限期 (60秒)，但未检测到新 ts 文件，判定为异常并重启
-                        logging.warning(f"{member_id}: 直播中但未检测到新 ts 文件，重启")
+                        # 进程运行已超过宽限期 (60秒)，但未检测到新 ts 文件（或文件不活跃），判定为异常并重启
+                        logging.warning(f"{member_id}: 直播中但未检测到新 ts 文件或文件不活跃，重启")
                         start_recording_process(member_id)
                     else:
                         logging.debug(f"{member_id}: 录制正常")

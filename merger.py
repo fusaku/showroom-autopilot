@@ -79,8 +79,26 @@ def find_ready_folders(parent_dir: Path):
             
         filelist_txt = folder / FILELIST_NAME
         output_file = OUTPUT_DIR / f"{folder.name}{OUTPUT_EXTENSION}"
+        
+        # 1. 检查是否存在 filelist.txt 且没有输出文件
         if filelist_txt.exists() and not output_file.exists():
-            candidate_folders.append(folder)
+            
+            # 2. 【核心修正】新增检查：确保 filelist.txt 包含有效文件行
+            has_valid_files = False
+            try:
+                with open(filelist_txt, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        # 只有当行内容是以 "file '" 开头时才认为它是有效文件
+                        if line.strip().startswith("file '"):
+                            has_valid_files = True
+                            break
+            except Exception:
+                # 文件读取失败也跳过
+                continue 
+
+            if has_valid_files:
+                # 只有包含有效文件的文件夹才会被加入到候选列表
+                candidate_folders.append(folder)
     
     if not candidate_folders:
         return []
@@ -128,8 +146,14 @@ def create_combined_filelist(folders_list, merged_name):
         for folder in folders_list:
             filelist_path = folder / FILELIST_NAME
             if filelist_path.exists():
-                with open(filelist_path, 'r') as f:
-                    out.writelines(f.readlines())
+                # 注意：使用 'utf-8' 编码读取
+                with open(filelist_path, 'r', encoding='utf-8') as f:
+                    # 最小化修改：仅写入 FFmpeg 识别的有效行，忽略注释和空行
+                    for line in f:
+                        stripped_line = line.strip()
+                        # 只有当行内容是以 "file '" 开头时才写入
+                        if stripped_line.startswith("file '"):
+                            out.write(line)
     
     return merged_file
 

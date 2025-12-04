@@ -413,7 +413,7 @@ class GitHubPagesPublisher:
                     "id": video_id,
                     "date": upload_info["upload_time"][:10],  # 只取日期部分
                     "title": upload_info["title"],
-                    "description": upload_info["description"],
+                    # "description": upload_info["description"],
                     "tags": upload_info["tags"]
                 }
 

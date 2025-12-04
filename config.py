@@ -60,7 +60,7 @@ FINAL_INACTIVE_THRESHOLD = 60  # 1分钟文件无活动才确认结束（秒）
 
 # ========================= 多文件夹处理配置 =========================
 PROCESS_ALL_FOLDERS = True  # 是否处理所有文件夹（True）还是只处理最新的（False）
-MAX_CONCURRENT_FOLDERS = 50  # 最大同时处理的文件夹数量（防止内存占用过多）
+MAX_CONCURRENT_FOLDERS_PER_LIVE = 50  # 最大同时处理的文件夹数量（防止内存占用过多）
 FOLDER_CLEANUP_DELAY = 120  # 完成的文件夹状态保留时间（秒），防止重复处理
 
 # ========================= 字幕合并配置 =========================

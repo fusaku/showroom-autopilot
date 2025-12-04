@@ -10,13 +10,6 @@ from config import *
 from merger import merge_once
 from datetime import datetime
 from typing import Optional
-from config import (
-    WALLET_DIR,
-    DB_USER,
-    DB_PASSWORD,
-    DB_TABLE,
-    TNS_ALIAS
-)
 from queue import Queue
 from threading import Thread
 
@@ -517,32 +510,38 @@ def finalize_live_check(ts_dir: Path, checked_files: set, valid_files: list, err
                     log(f"[{base_name}] {err_msg}")
                     error_logs.append(err_msg)
     
-    if not valid_files:
-        log(f"[{base_name}] 没有有效的 .ts 文件")
-        return False
-    
     # 按文件名排序
     valid_files.sort()
     
-    # 写 filelist.txt
+    # 写 filelist.txt：无论是否有有效文件，都需要创建这个文件作为检查完成的标记
     with open(filelist_txt, "w", encoding="utf-8") as f:
-        for vf in valid_files:
-            f.write(f"file '{vf.resolve()}'\n")
-    
-    log(f"[{base_name}] 检查完成，共 {len(valid_files)} 个有效文件")
+        if valid_files:
+            # 如果有有效文件，写入列表
+            for vf in valid_files:
+                f.write(f"file '{vf.resolve()}'\n")
+            log(f"[{base_name}] 检查完成，共 {len(valid_files)} 个有效文件")
+            result_success = True
+        else:
+            # 如果没有有效文件，写入一个标记注释，防止后续循环重复检查
+            f.write(f"# No valid .ts files found. Marked as checked at {datetime.now()}\n")
+            log(f"[{base_name}] 没有有效的 .ts 文件，已标记为检查完成。")
+            result_success = False
     
     # 写日志文件
-    if error_logs:
+    if error_logs or not result_success: # 如果有错误或结果失败，都写日志
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         with open(log_file, "w", encoding="utf-8") as logf:
             logf.write(f"检测时间：{datetime.now()}\n")
             logf.write(f"总文件数：{len(ts_files)}\n")
             logf.write(f"有效文件数：{len(valid_files)}\n")
             logf.write(f"错误文件数：{len(error_logs)}\n\n")
+            if not result_success:
+                 logf.write("此文件夹中未找到任何有效的视频流文件，已强制标记完成。\n\n")
             logf.write("\n".join(error_logs))
-        log(f"[{base_name}] 存在异常，日志写入：{log_file}")
+        log(f"[{base_name}] 存在异常/为空，日志写入：{log_file}")
     
-    return True
+    # 返回的是检查是否找到了有效文件
+    return result_success
 
 
 # ========================= 文件夹处理逻辑 =========================
@@ -671,14 +670,36 @@ def main_loop():
             if PROCESS_ALL_FOLDERS:
                 all_folders = find_all_live_folders(PARENT_DIR)
                 all_folders = [f for f in all_folders if not has_been_merged(f)]
-                if len(all_folders) > MAX_CONCURRENT_FOLDERS:
-                    all_folders = all_folders[-MAX_CONCURRENT_FOLDERS:]
+
+                # 按直播分组后再限制每组的文件夹数量
+                if all_folders:
+                    # 先按成员和时间分组
+                    grouped = group_folders_by_member(all_folders)
+
+                    # 对每组限制文件夹数量(保留最早的文件夹)
+                    all_folders = []  # ← 清空准备重建
+                    for group_key, group_folders in list(grouped.items()):
+                        # 按创建时间排序(最早的在前)
+                        group_folders.sort(key=lambda x: x.stat().st_ctime)
+
+                        # 如果该组超过限制,只取最早的N个
+                        if len(group_folders) > MAX_CONCURRENT_FOLDERS_PER_LIVE:
+                            if DEBUG_MODE:
+                                log(f"直播组 {group_key} 有 {len(group_folders)} 个文件夹,限制为 {MAX_CONCURRENT_FOLDERS_PER_LIVE} 个")
+                            group_folders = group_folders[:MAX_CONCURRENT_FOLDERS_PER_LIVE]
+                            grouped[group_key] = group_folders  # ← 更新 grouped 字典
+
+                        all_folders.extend(group_folders)  # ← 重建 all_folders
+                else:
+                    grouped = {}  # 空字典
             else:
                 latest_folder = find_latest_live_folder(PARENT_DIR)
                 if latest_folder and not has_been_merged(latest_folder):
                     all_folders = [latest_folder]
+                    grouped = group_folders_by_member(all_folders)
                 else:
                     all_folders = []
+                    grouped = {}  # 空字典
 
             if not all_folders:
                 if DEBUG_MODE:
@@ -687,8 +708,6 @@ def main_loop():
                 continue
             
             # ==== 直接进入按组处理,不需要全局判断 ====
-            grouped = group_folders_by_member(all_folders)
-            
             for group_key, group_folders in grouped.items():
                 member_id = extract_member_name_from_folder(group_folders[0].name)
                 
