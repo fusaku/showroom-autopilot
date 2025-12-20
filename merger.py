@@ -7,7 +7,6 @@ from collections import defaultdict
 from pathlib import Path
 from config import *
 
-# 尝试导入上传模块，如果不存在则跳过
 try:
     from upload_youtube import upload_all_pending_videos
     UPLOAD_AVAILABLE = True
@@ -206,11 +205,20 @@ def merge_item(item: dict) -> bool:
 
         if result.returncode == 0:
             log(f"{name} 合并完成")
-            # 新增：为所有被合并的文件夹创建标记文件
-            if item['type'] == 'merged':
-                for folder in item['folders']:
-                    marker_file = folder / ".merged"
-                    marker_file.write_text(f"已合并到: {name}\n时间: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+            # --- 修改部分：统一为所有相关的原始文件夹添加标记 ---
+            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+            for folder in item['folders']:  # 无论 single 还是 merged，folders 列表里都有目标文件夹
+                marker_file = folder / ".merged"
+                try:
+                    marker_content = (
+                        f"Status: Success\n"
+                        f"Merged Time: {timestamp}\n"
+                        f"Output File: {name}{OUTPUT_EXTENSION}\n"
+                    )
+                    marker_file.write_text(marker_content, encoding='utf-8')
+                    log(f"已为文件夹 {folder.name} 添加合并标记")
+                except Exception as e:
+                    log(f"无法为 {folder.name} 创建标记文件: {e}")
             return True
         else:
             log(f"{name} 合并失败，请检查 ffmpeg 日志")
@@ -235,12 +243,37 @@ def merge_all_ready():
     return success_count
 
 def upload_if_needed(success_count):
-    if success_count > 0:
-        if ENABLE_AUTO_UPLOAD and UPLOAD_AVAILABLE:
-            log("检测是否有已经合并,还未上传的视频")
-            upload_all_pending_videos(OUTPUT_DIR)
-        elif ENABLE_AUTO_UPLOAD and not UPLOAD_AVAILABLE:
-            log("自动上传已启用但上传模块不可用")
+    """如果合并成功，通过外部进程异步启动上传任务"""
+    
+    if ENABLE_AUTO_UPLOAD and success_count > 0 and UPLOAD_AVAILABLE:
+        log("🎬 [异步触发] 正在启动独立上传进程...")
+        
+        try:
+            # 1. 配置路径
+            VENV_ACTIVATE_DIR = "/home/ubuntu/venv"
+            script_path = Path("/home/ubuntu/live-merge-up") / "upload_youtube.py"
+            
+            # 2. 构造命令 (必须带 -u 确保无缓冲)
+            full_command = f"source {VENV_ACTIVATE_DIR}/bin/activate && python3 -u {str(script_path)}"
+            
+            command = [
+                "/bin/bash",
+                "-c",
+                full_command
+            ]
+            
+            # 3. 异步启动
+            # 注意：不设置 stdout 和 stderr，它们会自动继承 merger.py 的输出流
+            # 也就是自动写入到 /home/ubuntu/logs/live-merge-up.log
+            subprocess.Popen(
+                command,
+                start_new_session=True 
+            )
+            
+            log("✅ 上传指令已发出，日志将自动追加到当前服务日志文件中。")
+            
+        except Exception as e:
+            log(f"🚨 [启动上传失败]: {e}")
 
 def merge_once(target_folders=None):  # 改成复数
     """执行一次合并操作

@@ -10,7 +10,6 @@ from datetime import datetime, timedelta # ✅ 新增导入 timedelta
 from logger_config import setup_logger
 from config import (
     ENABLED_MEMBERS, 
-    RESTART_CHECK_INTERVAL, 
     MIN_RESTART_INTERVAL,
     TS_PARENT_DIR,
     LOG_DIR,
@@ -21,87 +20,140 @@ from config import (
     TNS_ALIAS
 )
 
+# 配置
+STOP_DELAY = 300  # 直播结束后5分钟再终止进程
+CHECK_INTERVAL = 1  # 每1秒检查一次所有成员
+# 【新增】文件活跃性检查宽限期（秒）：进程刚启动后，等待此时间后才开始检查文件。您要求 35 秒
+FILE_CHECK_GRACE_PERIOD = 35
+# 【新增】文件不活动触发重启的阈值（秒）：文件超过此时间未更新，判定为卡死并重启。您要求 60 秒
+FILE_INACTIVITY_THRESHOLD = 60
+
 os.environ["TNS_ADMIN"] = WALLET_DIR
+GLOBAL_CONN = None 
+
+setup_logger(LOG_DIR, "smart_start_handler")
 
 """获取Oracle数据库连接"""
-try:
-    GLOBAL_CONN = cx_Oracle.connect(user=DB_USER, password=DB_PASSWORD, dsn=TNS_ALIAS)
-except Exception as e:
-    logging.error(f"Oracle数据库连接失败，脚本退出: {e}")
+def connect_db():
+    """尝试建立或重新建立 Oracle 数据库连接。"""
+    global GLOBAL_CONN
+    
+    # 如果已存在连接，先尝试关闭它
+    if GLOBAL_CONN:
+        try:
+            # 尝试关闭，忽略失败
+            GLOBAL_CONN.close()
+            # logging.info("旧的数据库连接已关闭。尝试重连...")
+        except Exception:
+            pass 
+        GLOBAL_CONN = None # 清理旧连接对象
+
+    try:
+        GLOBAL_CONN = cx_Oracle.connect(user=DB_USER, password=DB_PASSWORD, dsn=TNS_ALIAS)
+        logging.info("Oracle数据库持久连接成功建立/重新连接成功。")
+        return True
+    except Exception as e:
+        # 这里只记录错误，但不退出
+        logging.error(f"Oracle数据库连接失败: {e}")
+        GLOBAL_CONN = None 
+        return False
+
+# 首次尝试连接
+if not connect_db():
+    logging.critical("首次数据库连接失败，脚本退出。")
     sys.exit(1)
 
 # 存储所有成员的进程和状态
 member_processes = {}  # {member_id: {'process': subprocess, 'last_live': timestamp, 'last_restart': timestamp}}
 
-# 配置
-STOP_DELAY = 300  # 直播结束后5分钟再终止进程
-CHECK_INTERVAL = 1  # 每1秒检查一次所有成员
-# 【新增】文件活跃性检查宽限期（秒），启动后需等待这么久才检查文件是否生成
-# ✅ 此常量 (60秒) 同时作为文件不活动触发重启的阈值
-FILE_CHECK_GRACE_PERIOD = 180
-
 # 清理状态标志
 is_cleaning_up = False
 
 def read_all_live_status():
-    """从数据库读取所有成员的直播状态"""
-    global GLOBAL_CONN # 必须声明 GLOBAL_CONN 为 global 才能对其赋值
+    """
+    从数据库读取所有成员的直播状态。
+    连接失效时，尝试重新连接。
+    """
+    global GLOBAL_CONN
     
-    # 检查连接是否有效，如果为 None (被 cleanup) 或断开，尝试重新连接
-    if GLOBAL_CONN is None:
+    MAX_ATTEMPTS = 2
+    
+    for attempt in range(MAX_ATTEMPTS):
+        # 强制检查连接是否为空
+        if GLOBAL_CONN is None:
+            logging.warning(f"全局数据库连接为空，尝试重新连接 (第 {attempt + 1} 次)...")
+            if not connect_db():
+                # 如果重连失败，且已是最后一次尝试，则退出
+                if attempt == MAX_ATTEMPTS - 1:
+                    logging.error("多次尝试重连数据库失败，返回空状态。")
+                    return {}
+                # 否则等待一下，进入下一次重试循环
+                time.sleep(1)
+                continue
+        
+        conn = GLOBAL_CONN
+        
         try:
-            logging.warning("全局数据库连接为 None，尝试重新连接...")
-            GLOBAL_CONN = cx_Oracle.connect(user=DB_USER, password=DB_PASSWORD, dsn=TNS_ALIAS)
-            logging.info("数据库重新连接成功")
+            with conn.cursor() as cursor:
+                # 只查询 enabled 的成员，排除已经用 systemd 服务管理的成员
+                member_ids = [m['id'] for m in ENABLED_MEMBERS if m['id'] != 'hashimoto_haruna']
+                placeholders = ','.join([f':id{i}' for i in range(len(member_ids))])
+                
+                query = f"""
+                    SELECT MEMBER_ID, IS_LIVE, STARTED_AT
+                    FROM {DB_TABLE}
+                    WHERE MEMBER_ID IN ({placeholders})
+                """
+                
+                # 构建绑定参数字典
+                bind_params = {f'id{i}': mid for i, mid in enumerate(member_ids)}
+                cursor.execute(query, bind_params)
+                results = cursor.fetchall()
+                
+                # 转换为字典格式
+                status_dict = {}
+                for row in results:
+                    member_id = row[0]
+                    is_live = bool(row[1])
+                    started_at = None
+                    
+                    if is_live and row[2]:
+                        if isinstance(row[2], datetime):
+                            started_at = int(row[2].timestamp())
+                        else:
+                            try:
+                                started_at = int(row[2])
+                            except (TypeError, ValueError):
+                                logging.error(f"{member_id} STARTED_AT 字段错误: {row[2]}")
+                    
+                    status_dict[member_id] = {
+                        'is_live': is_live,
+                        'started_at': started_at
+                    }
+                
+                return status_dict # 成功，退出函数
+                
+        except cx_Oracle.Error as e:
+            # 捕获 Oracle 数据库错误，这意味着连接可能断开
+            logging.error(f"从数据库读取状态失败（连接可能失效）: {e}")
+            GLOBAL_CONN = None # 标记连接失效，触发下一轮重连
+            
+            # 如果是最后一次尝试，则直接返回失败状态
+            if attempt == MAX_ATTEMPTS - 1:
+                logging.error("多次尝试读取数据库状态失败，返回空状态。")
+                return {}
+            
+            # 否则，等待一下，进入下一次循环尝试重连
+            time.sleep(1)
+            continue
+            
         except Exception as e:
-            logging.error(f"重新连接数据库失败，跳过状态读取: {e}")
+            # 捕获其他非 cx_Oracle 错误 (如程序逻辑错误)，直接返回失败
+            logging.error(f"读取状态时发生非数据库异常: {e}")
             return {}
-
-    conn = GLOBAL_CONN
-    
-    try:
-        with conn.cursor() as cursor:
-            # 只查询 enabled 的成员，排除已经用 systemd 服务管理的成员
-            member_ids = [m['id'] for m in ENABLED_MEMBERS if m['id'] != 'hashimoto_haruna']
-            placeholders = ','.join([f':id{i}' for i in range(len(member_ids))])
             
-            query = f"""
-                SELECT MEMBER_ID, IS_LIVE, STARTED_AT
-                FROM {DB_TABLE}
-                WHERE MEMBER_ID IN ({placeholders})
-            """
-            
-            # 构建绑定参数字典
-            bind_params = {f'id{i}': mid for i, mid in enumerate(member_ids)}
-            cursor.execute(query, bind_params)
-            results = cursor.fetchall()
-            
-            # 转换为字典格式
-            status_dict = {}
-            for row in results:
-                member_id = row[0]
-                is_live = bool(row[1])
-                started_at = None
-                
-                if is_live and row[2]:
-                    if isinstance(row[2], datetime):
-                        started_at = int(row[2].timestamp())
-                    else:
-                        try:
-                            started_at = int(row[2])
-                        except (TypeError, ValueError):
-                            logging.error(f"{member_id} STARTED_AT 字段错误: {row[2]}")
-                
-                status_dict[member_id] = {
-                    'is_live': is_live,
-                    'started_at': started_at
-                }
-            
-            return status_dict
-            
-    except Exception as e:
-        logging.error(f"从数据库读取状态失败: {e}")
-        return {}
+    # 如果循环结束仍未成功
+    return {}
 
 # showroom-smart-start.py
 
@@ -199,8 +251,8 @@ def has_new_ts_files(member_id: str, started_at_unix: int) -> bool:
         return False
     time_since_last_write = current_time - latest_mtime
     
-    # ✅ 核心判断：检查最新文件修改时间是否在 FILE_CHECK_GRACE_PERIOD (60秒) 范围内
-    if time_since_last_write < FILE_CHECK_GRACE_PERIOD: 
+    # ✅ 核心判断：检查最新文件修改时间是否在 FILE_INACTIVITY_THRESHOLD (60秒) 范围内
+    if time_since_last_write < FILE_INACTIVITY_THRESHOLD: 
         logging.debug(f"{member_id}: 录制正常，文件 {latest_ts.name} 更新于 {time_since_last_write:.0f}s 前")
         return True
     
@@ -330,6 +382,15 @@ def monitor_all_members():
     while True:
         current_time = time.time()
         
+        # ✅ 每次循环开始时重新加载成员配置
+        try:
+            from config import get_enabled_members
+            all_enabled = get_enabled_members()
+            monitored_members = [m for m in all_enabled if m['id'] != 'hashimoto_haruna']
+        except Exception as e:
+            logging.error(f"重新加载成员配置失败: {e},继续使用旧配置")
+            monitored_members = [m for m in ENABLED_MEMBERS if m['id'] != 'hashimoto_haruna']
+
         # 获取所有成员的直播状态
         live_status = read_all_live_status()
 
@@ -430,9 +491,7 @@ def cleanup():
         finally:
             GLOBAL_CONN = None
 
-if __name__ == "__main__":
-    setup_logger(LOG_DIR, "smart_start_handler")
-    
+if __name__ == "__main__":    
     if not TS_PARENT_DIR.exists():
         logging.error(f"错误: ts 目录 {TS_PARENT_DIR} 不存在")
         if 'GLOBAL_CONN' in globals() and GLOBAL_CONN:

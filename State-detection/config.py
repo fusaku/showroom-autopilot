@@ -80,6 +80,10 @@ def load_members():
     
     return enabled
 
+def get_enabled_members():
+    """获取最新的成员配置"""
+    return load_members()
+
 ENABLED_MEMBERS = load_members()
 
 # ==== 监控配置 ====

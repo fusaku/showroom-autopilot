@@ -4,8 +4,9 @@ import fcntl
 import os
 import shutil
 import json
+import signal
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from google.auth.transport.requests import Request
@@ -20,6 +21,9 @@ from config import *
 LAST_QUOTA_EXHAUSTED_DATE = None
 JST = ZoneInfo("Asia/Tokyo")
 PACIFIC = ZoneInfo("America/Los_Angeles")
+MAX_RETRIES = 5  # 最大重试次数
+UPLOAD_DELAY = 60 # 每次重试等待时间（秒）
+CHUNK_TIMEOUT_SECONDS = 30 # 30秒
 
 # 加载成员配置
 def load_members_config():
@@ -32,9 +36,6 @@ def load_members_config():
         if DEBUG_MODE:
             log(f"加载 members.json 失败: {e}")
         return []
-
-# 全局成员列表
-MEMBERS = load_members_config()
 
 class FileLock:
     """文件锁类，防止多个进程同时处理同一个文件"""
@@ -85,6 +86,12 @@ def convert_title_to_japanese(title: str) -> str:
         转换后的标题
     """
     converted_title = title
+
+    # ========== 每次上传前重新加载members.json ==========
+    MEMBERS = load_members_config()
+    if VERBOSE_LOGGING:
+        log(f"已重新加载成员配置，共 {len(MEMBERS)} 个成员")
+    # ============================================================
     
     # 遍历所有成员，进行名字转换
     for member in MEMBERS:
@@ -102,7 +109,7 @@ def convert_title_to_japanese(title: str) -> str:
 
 def get_today_utc_date_str():
     """获取今天的UTC日期字符串"""
-    return datetime.utcnow().strftime("%Y-%m-%d")
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 def get_next_retry_time_japan():
     """获取下次重试时间（太平洋时间0点对应的日本时间）"""
@@ -311,11 +318,22 @@ def upload_video(
     """
     上传视频到YouTube
     """
+    class UploadTimeout(Exception):
+        pass
+
+    def timeout_handler(signum, frame):
+        raise UploadTimeout("上传块超时")    
+
     file_path_obj = Path(file_path)
     if not file_path_obj.exists():
         log(f"文件不存在: {file_path}")
         return None
-    
+
+    # ========== 每次上传前重新加载members.json ==========
+    MEMBERS = load_members_config()
+    if VERBOSE_LOGGING:
+        log(f"已重新加载成员配置，共 {len(MEMBERS)} 个成员")
+
     # 判断是否是橋本陽菜的视频
     # 检查文件名中是否包含橋本陽菜的英文或日文名
     is_hashimoto = False
@@ -414,40 +432,109 @@ def upload_video(
     }
     
     try:
-        media = MediaFileUpload(file_path, chunksize=-1, resumable=True)
+        media = MediaFileUpload(file_path, chunksize=128 * 1024 * 1024, resumable=True)
         request = youtube.videos().insert(
             part="snippet,status",
             body=body,
             media_body=media
         )
+        # 这个设置确保 next_chunk 在 180 秒内必须返回。
+        request.http.timeout = CHUNK_TIMEOUT_SECONDS 
+        log(f"已设置 HTTP 请求超时为 {CHUNK_TIMEOUT_SECONDS} 秒")
     except Exception as e:
         log(f"创建上传请求失败: {e}")
         return None
 
     # 执行上传
+    retry_count = 0
     response = None
-    try:
-        log(f"开始上传: {file_path_obj.name}")
-        log(f"视频标题: {title}")
-        while response is None:
-            status, response = request.next_chunk()
-            if status:
-                progress = int(status.progress() * 100)
-                log(f"上传进度: {progress}%")
-                
-    except HttpError as e:
-        if e.resp.status == 403 and 'quotaExceeded' in str(e):
-            log("上传配额已用尽")
-            raise  # 重新抛出配额错误
-        else:
-            log(f"上传失败: {e}")
-            return None
-    except Exception as e:
-        log(f"上传过程中出现错误: {e}")
-        return None
+    log(f"开始上传: {file_path_obj.name}")
+    log(f"视频标题: {title}")
 
+    # 使用外部 while 循环来处理重试
+    while retry_count < MAX_RETRIES:        
+        # ========== 每次重试都重新创建完整的上传会话 ==========
+        try:
+            # 如果是重试，重新获取 youtube 服务
+            if retry_count > 0:
+                log("重新获取YouTube服务...")
+                if is_hashimoto:
+                    youtube = get_authenticated_service()
+                else:
+                    youtube = get_authenticated_service_alt()
+
+            # 创建新的上传请求
+            media = MediaFileUpload(file_path, chunksize=128 * 1024 * 1024, resumable=True)
+            request = youtube.videos().insert(
+                part="snippet,status",
+                body=body,
+                media_body=media
+            )
+            request.http.timeout = CHUNK_TIMEOUT_SECONDS
+
+            if retry_count > 0:
+                log(f"已创建新的上传会话 (重试 {retry_count}/{MAX_RETRIES})")
+        except Exception as e:
+            log(f"创建上传请求失败: {e}")
+            retry_count += 1
+            if retry_count < MAX_RETRIES:
+                time.sleep(UPLOAD_DELAY)
+            continue
+
+        try:
+            # 内部循环执行断点续传
+            while response is None:
+                # 设置30秒超时
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(CHUNK_TIMEOUT_SECONDS) 
+
+                try:
+                    status, response = request.next_chunk()
+                    signal.alarm(0)  # 成功后取消闹钟   
+
+                    if status:
+                        progress = int(status.progress() * 100)
+                        log(f"上传进度: {progress}% (重试 {retry_count}/{MAX_RETRIES})")    
+
+                except UploadTimeout:
+                    signal.alarm(0)  # 取消闹钟
+                    raise  # 抛给外层处理
+                
+            # 成功完成上传，跳出重试循环
+            break
+
+        except UploadTimeout as e:
+            log(f"上传块在 {CHUNK_TIMEOUT_SECONDS} 秒内无响应")
+            retry_count += 1
+            response = None  # 重置
+
+            if retry_count < MAX_RETRIES:
+                log(f"等待 {UPLOAD_DELAY} 秒后重试 ({retry_count}/{MAX_RETRIES})...")
+                time.sleep(UPLOAD_DELAY)
+            else:
+                log(f"达到最大重试次数 ({MAX_RETRIES})，上传失败。")
+                break
+
+        except HttpError as e:
+            if e.resp.status == 403 and 'quotaExceeded' in str(e):
+                log("上传配额已用尽")
+                raise  # 重新抛出配额错误
+            else:
+                log(f"上传失败: {e}")
+                return None
+
+        except Exception as e:
+            # 捕获其他未知错误，并进行重试
+            log(f"上传过程中出现未知错误 (重试 {retry_count+1}/{MAX_RETRIES}): {e}")
+            retry_count += 1
+            if retry_count < MAX_RETRIES:
+                log(f"等待 {UPLOAD_DELAY} 秒后重试...")
+                time.sleep(UPLOAD_DELAY)
+            else:
+                log(f"达到最大重试次数 ({MAX_RETRIES})，上传失败。")
+                break # 跳出重试循环
     if not response:
-        log("上传失败：未收到响应")
+        log("上传失败：达到最大重试次数或未收到响应")
         return None
 
     video_id = response.get("id")
@@ -473,6 +560,13 @@ def handle_merged_video(mp4_path: Path) -> bool:
     Returns:
         是否成功处理（True=成功，False=配额用尽或失败）
     """
+
+    # ========== 每次处理前重新加载members.json ==========
+    MEMBERS = load_members_config()
+    if VERBOSE_LOGGING:
+        log(f"已重新加载成员配置，共 {len(MEMBERS)} 个成员")
+    # ============================================================
+
     if is_uploaded(mp4_path):
         if VERBOSE_LOGGING:
             log(f"{mp4_path.name} 已上传，跳过")
@@ -569,71 +663,55 @@ def upload_all_pending_videos(directory: Path = None):
         _upload_all_pending_videos_internal(directory)
 
 def _upload_all_pending_videos_internal(directory: Path):
-    """内部上传函数，已经获得锁保护"""
+    """
+    在一次运行中循环扫描，直到目录下没有任何待上传文件。
+    """
     global LAST_QUOTA_EXHAUSTED_DATE
-
-    today_str = get_today_utc_date_str()
-    retry_time = get_next_retry_time_japan()
-
-    # 检查今天是否已经配额用尽
-    if YOUTUBE_ENABLE_QUOTA_MANAGEMENT and LAST_QUOTA_EXHAUSTED_DATE == today_str:
-        if VERBOSE_LOGGING:
-            log(f"检测到上传配额在 {today_str} 已用尽，将在日本时间 {retry_time} 后重试。")
-        return
 
     if not directory.exists():
         log(f"目录不存在: {directory}")
         return
 
-    if VERBOSE_LOGGING:
-        log(f"扫描目录: {directory}")
+    # 循环：只要有文件，就一直处理
+    while True:
+        today_str = get_today_utc_date_str()
+        retry_time = get_next_retry_time_japan()
 
-    # 查找所有MP4文件
-    mp4_files = sorted(directory.glob("*.mp4"))
-    if VERBOSE_LOGGING:
-        log(f"找到 {len(mp4_files)} 个 MP4 文件")
-    
-    if not mp4_files:
-        if VERBOSE_LOGGING:
-            log("没有找到MP4文件")
-        return
+        # 1. 检查配额状态
+        if YOUTUBE_ENABLE_QUOTA_MANAGEMENT and LAST_QUOTA_EXHAUSTED_DATE == today_str:
+            log(f"检测到配额已耗尽，退出循环。下次重试时间: {retry_time}")
+            return
 
-    # 过滤出未上传的文件
-    pending_files = []
-    for mp4_file in mp4_files:
-        if is_uploaded(mp4_file):
-            if VERBOSE_LOGGING:
-                log(f"跳过（已上传）: {mp4_file.name}")
-        else:
-            if VERBOSE_LOGGING:
-                log(f"待上传: {mp4_file.name}")
-            pending_files.append(mp4_file)
+        # 2. 重新扫描目录（这是关键，能看到 merger.py 刚刚生成的新文件）
+        mp4_files = sorted(directory.glob("*.mp4"))
+        pending_files = [f for f in mp4_files if not is_uploaded(f)]
 
-    if not pending_files:
-        if VERBOSE_LOGGING:
-            log("没有未上传的视频")
-        return
-
-    log(f"开始上传 {len(pending_files)} 个未上传的视频")
-    
-    # 逐个上传文件
-    for mp4_file in pending_files:
-        if VERBOSE_LOGGING:
-            log(f"\n处理文件: {mp4_file.name}")
-        
-        success = handle_merged_video(mp4_file)
-        
-        if not success:
-            if YOUTUBE_ENABLE_QUOTA_MANAGEMENT:
-                log(f"上传配额耗尽，将在日本时间 {retry_time} 后重试")
-                LAST_QUOTA_EXHAUSTED_DATE = today_str
+        # 如果没有待上传文件，说明彻底传完了，跳出循环结束进程
+        if not pending_files:
+            log("扫描完成：当前目录下没有待上传的视频。")
             break
+
+        log(f"本轮发现 {len(pending_files)} 个待上传视频")
+
+        # 3. 逐个处理本轮发现的文件
+        for mp4_file in pending_files:
+            log(f"正在处理: {mp4_file.name}")
             
-        # 在文件之间添加延迟，避免过于频繁的API调用
-        if len(pending_files) > 1:
-            time.sleep(5)
-    
-    log("上传任务完成")
+            success = handle_merged_video(mp4_file)
+            
+            if not success:
+                # 如果是配额问题或严重错误，记录日期并退出整个函数
+                if YOUTUBE_ENABLE_QUOTA_MANAGEMENT:
+                    LAST_QUOTA_EXHAUSTED_DATE = today_str
+                log("上传过程中止，退出程序。")
+                return 
+
+            # 每个视频间的间隔
+            if len(pending_files) > 1:
+                log(f"剩余 {len(pending_files)} 个视频,10秒后上传")
+                time.sleep(10)
+
+        log("本轮文件处理完毕，准备进行下一次目录扫描...")
 
 def save_upload_info(file_path: Path, video_id: str, title: str, description: str, tags: list, upload_time: str):
     """保存上传信息到JSON文件"""

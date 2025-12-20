@@ -214,85 +214,75 @@ def is_really_stream_ended(all_folders, grace_period=FINAL_INACTIVE_THRESHOLD):
     return True
 
 def has_matching_subtitle_file(ts_dir: Path):
-    """检查指定文件夹是否有对应的字幕文件，支持自动处理不匹配情况"""
+    """检查指定文件夹是否有对应的字幕文件，支持基于时间戳最接近原则的自动匹配"""
     if not ts_dir:
         return False
     
     folder_name = ts_dir.name
     
     try:
-        date_part = folder_name[:6]  # 取前6位作为日期
-        # 转换为完整日期格式 250826 -> 2025-08-26
-        year = "20" + date_part[:2]
-        month = date_part[2:4]
-        day = date_part[4:6]
+        # 1. 解析日期和基础路径
+        date_part = folder_name[:6]
+        year, month, day = f"20{date_part[:2]}", date_part[2:4], date_part[4:6]
         date_folder = f"{year}-{month}-{day}"
-        
-        # 构建字幕文件路径
         subtitle_dir = SUBTITLE_ROOT / date_folder / SUBTITLE_SUBPATH
         exact_subtitle = subtitle_dir / f"{folder_name}.ass"
         
-        # 首先检查精确匹配
+        # 2. 首先检查精确匹配
         if exact_subtitle.exists():
             return True
         
-        # 如果精确匹配失败,提取人名进行模糊匹配
-        # 从文件夹名称中提取人名部分
-        # 格式: "日期 Showroom - 团队信息 人名 时间戳"
-        try:
-            # 分割文件夹名,提取关键部分
-            parts = folder_name.split(" - ")
-            if len(parts) >= 2:
-                # parts[1] 应该是 "AKB48 Team 8 Hashimoto Haruna 064348"
-                name_parts = parts[1].split()
-                
-                # 查找人名:通常是最后两个单词(姓氏 名字),但要排除时间戳
-                # 时间戳格式是6位数字
-                filtered_parts = [p for p in name_parts if not (p.isdigit() and len(p) == 6)]
-                
-                # 如果有足够的部分,取最后两个作为人名
-                if len(filtered_parts) >= 2:
-                    # 姓氏和名字
-                    last_name = filtered_parts[-2]
-                    first_name = filtered_parts[-1]
-                    name_pattern = f"{last_name} {first_name}"
-                else:
-                    name_pattern = None
-            else:
-                name_pattern = None
-                
-        except Exception as e:
-            if DEBUG_MODE:
-                log(f"解析人名失败: {folder_name}, 错误: {e}")
-            name_pattern = None
-        
-        # 如果成功提取人名,在同一天的字幕文件中查找包含该人名的文件
+        # 3. 提取视频文件夹的时间戳 (假设格式末尾是 6 位数字)
+        video_ts_str = folder_name.split()[-1]
+        if not (video_ts_str.isdigit() and len(video_ts_str) == 6):
+            video_ts_val = None
+        else:
+            video_ts_val = int(video_ts_str)
+
+        # 4. 提取人名进行模糊匹配
+        name_pattern = None
+        parts = folder_name.split(" - ")
+        if len(parts) >= 2:
+            name_parts = parts[1].split()
+            filtered_parts = [p for p in name_parts if not (p.isdigit() and len(p) == 6)]
+            if len(filtered_parts) >= 2:
+                name_pattern = f"{filtered_parts[-2]} {filtered_parts[-1]}"
+
+        # 5. 执行智能搜索
         if name_pattern and subtitle_dir.exists():
-            # 先尝试精确匹配人名
+            # 获取所有符合日期和人名的字幕
             subtitle_files = list(subtitle_dir.glob(f"{date_part} Showroom*{name_pattern}*.ass"))
             
-            # 如果没找到,尝试只用姓氏匹配
-            if not subtitle_files and len(filtered_parts) >= 2:
-                last_name = filtered_parts[-2]
-                subtitle_files = list(subtitle_dir.glob(f"{date_part} Showroom*{last_name}*.ass"))
-            
             if subtitle_files:
-                # 找到匹配的字幕文件,自动创建软链接
-                source_subtitle = subtitle_files[0]  # 取第一个匹配的
-                log(f"检测到字幕文件不匹配情况:")
-                log(f"  视频文件夹: {folder_name}")
-                log(f"  字幕文件: {source_subtitle.name}")
-                log(f"  匹配模式: {name_pattern}")
-                log(f"  自动创建匹配的字幕文件...")
+                target_subtitle = None
                 
+                if len(subtitle_files) == 1:
+                    target_subtitle = subtitle_files[0]
+                elif video_ts_val is not None:
+                    # 如果有多个字幕，找时间戳最接近的一个
+                    best_diff = float('inf')
+                    for sub in subtitle_files:
+                        try:
+                            # 提取字幕文件名中的时间戳 (假设也在末尾)
+                            sub_ts_str = sub.stem.split()[-1]
+                            if sub_ts_str.isdigit() and len(sub_ts_str) == 6:
+                                diff = abs(int(sub_ts_str) - video_ts_val)
+                                if diff < best_diff:
+                                    best_diff = diff
+                                    target_subtitle = sub
+                        except:
+                            continue
+                
+                # 如果没能通过时间戳筛选，保底取第一个
+                if not target_subtitle:
+                    target_subtitle = subtitle_files[0]
+
+                # 6. 自动创建软链接
                 try:
-                    # 创建软链接
-                    exact_subtitle.symlink_to(source_subtitle)
-                    log(f"✓ 成功创建软链接: {exact_subtitle.name}")
+                    log(f"找到最匹配字幕: {target_subtitle.name} (对应视频: {folder_name})")
+                    exact_subtitle.symlink_to(target_subtitle)
                     return True
                 except FileExistsError:
-                    # 软链接已存在,直接返回True
-                    log(f"✓ 软链接已存在: {exact_subtitle.name}")
                     return True
                 except Exception as e:
                     log(f"✗ 创建软链接失败: {e}")
@@ -302,7 +292,7 @@ def has_matching_subtitle_file(ts_dir: Path):
         
     except Exception as e:
         if DEBUG_MODE:
-            log(f"解析文件夹日期失败: {folder_name}, 错误: {e}")
+            log(f"解析匹配出错: {folder_name}, 错误: {e}")
         return False
 
 def get_earliest_active_folder(all_folders):
@@ -321,39 +311,53 @@ def get_earliest_active_folder(all_folders):
     return min(active_folders, key=lambda x: x.stat().st_ctime)
 
 # ========================= 网络状态检查 (数据库) =========================
+db_pool = None
+
+def get_db_pool():
+    """获取或初始化连接池（单例模式）"""
+    global db_pool
+    if db_pool is None:
+        try:
+            db_pool = cx_Oracle.SessionPool(
+                user=DB_USER,
+                password=DB_PASSWORD,
+                dsn=TNS_ALIAS,
+                min=0,          # 不使用时保持 0 个连接，节省资源
+                max=5,          # 20人直播时，5个连接足以应对
+                increment=1,
+                threaded=True,  # 支持多线程安全
+                getmode=cx_Oracle.SPOOL_ATTRVAL_WAIT
+            )
+            log("✨ 数据库连接池已初始化 (按需分配)")
+        except Exception as e:
+            log(f"❌ 初始化连接池失败: {e}")
+    return db_pool
+
 
 def read_is_live(member_id: str):
-    """从数据库读取指定成员的直播状态 (每次操作建立新连接)"""
+    """从连接池中获取连接执行查询，执行完自动归还"""
+    pool = get_db_pool()
+    if not pool:
+        return False
     
-    # 每次调用时，在 try 块内建立和关闭连接，确保连接有效性和资源释放
     try:
-        # 使用 'with' 语句保证连接和游标自动关闭
-        with cx_Oracle.connect(user=DB_USER, password=DB_PASSWORD, dsn=TNS_ALIAS) as conn:
+        # 使用 with pool.acquire() 会在执行完毕后自动将连接放回池中，而不是关闭它
+        with pool.acquire() as conn:
             with conn.cursor() as cursor:
-                # 查询指定成员的状态
-                query = f"""
-                    SELECT IS_LIVE
-                    FROM {DB_TABLE}
-                    WHERE MEMBER_ID = :member_id
-                """
-                
+                query = f"SELECT IS_LIVE FROM {DB_TABLE} WHERE MEMBER_ID = :member_id"
                 cursor.execute(query, {'member_id': member_id})
                 result = cursor.fetchone()
                 
                 if result:
-                    # IS_LIVE 字段 (1=True, 0=False)
                     is_live = bool(result[0])
                     if VERBOSE_LOGGING:
-                        log(f"从数据库读取状态: 成员 {member_id}, is_live={is_live}")
+                        log(f"数据库状态: {member_id} is_live={is_live}")
                     return is_live
-                else:
-                    if VERBOSE_LOGGING:
-                        log(f"数据库中未找到成员 {member_id} 的记录")
-                    return False
-            
+                return False
     except Exception as e:
-        # 捕获连接失败或查询失败的错误
-        log(f"从数据库读取状态失败: {e}")
+        # 如果数据库一天只开几小时，关闭期间这里会记录错误，但不影响主程序运行
+        if VERBOSE_LOGGING:
+            log(f"查询成员 {member_id} 状态失败 (数据库可能未开启): {e}")
         return False
 
 def extract_member_name_from_folder(folder_name: str) -> Optional[str]:
@@ -712,12 +716,7 @@ def main_loop():
                 member_id = extract_member_name_from_folder(group_folders[0].name)
                 
                 # 该组的网络状态
-                if member_id:
-                    group_is_streaming = read_is_live(member_id)
-                else:
-                    group_is_streaming = False
-                    if DEBUG_MODE:
-                        log(f"无法提取成员ID: {group_key}")
+                group_is_streaming = read_is_live(member_id) if member_id else False
                 
                 # 该组的文件活跃度
                 group_files_active = not is_really_stream_ended(group_folders, FINAL_INACTIVE_THRESHOLD)
@@ -810,9 +809,14 @@ def main_loop():
             time.sleep(CHECK_INTERVAL)
             
     except KeyboardInterrupt:
-        log("收到停止信号,等待合并队列完成...")
-        merge_queue.join()  # 等待所有合并任务完成
-        merge_queue.put(None)  # 发送停止信号
+        log("收到停止信号，正在清理资源...")
+        if db_pool:
+            try:
+                db_pool.close() # 显式关闭连接池，释放所有数据库会话
+                log("数据库连接池已安全关闭")
+            except:
+                pass
+        merge_queue.join()
         log("程序退出")
     except Exception as e:
         log(f"主循环发生错误: {e}")

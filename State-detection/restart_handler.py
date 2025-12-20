@@ -13,26 +13,46 @@ from config import (
     TS_PARENT_DIR,
     LOG_DIR, 
     GRACEFUL_START_DELAY,
-    # 新增下面这些
     WALLET_DIR,
     DB_USER,
     DB_PASSWORD,
     DB_TABLE,
     TNS_ALIAS
 )
+# **全局变量**
 # ✅ 修改配置常量：TS文件多久没有更新视为录制停止，改为 60 秒
 MAX_TS_INACTIVE_TIME = 60 # 60 秒
-
+GLOBAL_CONN = None 
 os.environ["TNS_ADMIN"] = WALLET_DIR
 
+setup_logger(LOG_DIR, "restart_handler")
 
 """获取Oracle数据库连接"""
-try:
-    # **全局变量：数据库连接**
-    GLOBAL_CONN = cx_Oracle.connect(user=DB_USER, password=DB_PASSWORD, dsn=TNS_ALIAS)
-    # logging.info("Oracle数据库持久连接成功建立。")
-except Exception as e:
-    logging.error(f"Oracle数据库连接失败，脚本退出: {e}")
+def connect_db():
+    """尝试建立或重新建立 Oracle 数据库连接。"""
+    global GLOBAL_CONN
+    
+    # 如果已存在连接，先尝试关闭它
+    if GLOBAL_CONN:
+        try:
+            GLOBAL_CONN.close()
+            logging.info("旧的数据库连接已关闭。尝试重连...")
+        except Exception:
+            pass 
+
+    try:
+        GLOBAL_CONN = cx_Oracle.connect(user=DB_USER, password=DB_PASSWORD, dsn=TNS_ALIAS)
+        logging.info("Oracle数据库持久连接成功建立/重新连接成功。")
+        return True
+    except Exception as e:
+        # 这里只记录错误，但不退出
+        logging.error(f"Oracle数据库连接失败: {e}")
+        GLOBAL_CONN = None 
+        return False
+
+# 首次尝试连接
+if not connect_db():
+    logging.critical("首次数据库连接失败，脚本退出。")
     sys.exit(1)
 
 MEMBER_ID = os.getenv("MEMBER_ID")
@@ -94,10 +114,23 @@ def read_live_status():
             else:
                 logging.warning(f"数据库中未找到成员 {MEMBER['id']} 的记录")
                 return False, None
-            
+    except cx_Oracle.Error as e:
+            # 捕获 Oracle 数据库错误，这通常意味着连接断开或会话失效
+            logging.error(f"从数据库读取状态失败（连接可能失效）: {e}")
+
+            # 尝试重连
+            logging.warning("尝试重新建立数据库连接...")
+            if connect_db():
+                # 重连成功，虽然本次读取失败，但下次循环应能恢复
+                logging.info("数据库连接已恢复。")
+            else:
+                # 重连失败，需要等待下次循环或重启
+                logging.error("数据库重连失败。")
+
+            return False, None
     except Exception as e:
-        # 捕获查询或游标操作的错误。连接仍然保持开放状态。
-        logging.error(f"从数据库读取状态失败: {e}")
+        # 捕获其他非 cx_Oracle 错误 (如程序逻辑错误)
+        logging.error(f"读取状态时发生非数据库异常: {e}")
         return False, None
 
 def get_latest_subfolder(parent: Path):
@@ -264,9 +297,7 @@ def restart_loop():
         
         time.sleep(RESTART_CHECK_INTERVAL)
 
-if __name__ == "__main__":
-    setup_logger(LOG_DIR, "restart_handler")
-    
+if __name__ == "__main__":    
     if not TS_PARENT_DIR.exists():
         logging.error(f"错误: ts 目录 {TS_PARENT_DIR} 不存在")
         # 即使目录不存在，我们也要确保连接被关闭

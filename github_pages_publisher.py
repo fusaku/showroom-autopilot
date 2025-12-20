@@ -8,16 +8,17 @@ import shutil
 import time
 import subprocess
 import re
+import subtitle_processor
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 
 # 导入配置
 try:
-    from github_publisher_config import *
+    from config import *
 except ImportError as e:
     log(f"无法导入配置文件: {e}")
-    log("请确保github_publisher_config.py文件存在")
+    log("请确保config.py文件存在")
     raise
 # ==================== 验证配置 ====================
 
@@ -148,6 +149,7 @@ class GitHubPagesPublisher:
 
     def move_subtitle_file(self, subtitle_file: Path, video_id: str) -> bool:
         """移动字幕文件并重命名为视频ID"""
+        processed_temp_file = None
         try:
             target_filename = f"{video_id}{subtitle_file.suffix}"
             target_path = SUBTITLES_TARGET_DIR / target_filename
@@ -156,10 +158,25 @@ class GitHubPagesPublisher:
             if target_path.exists():
                 self.log(f"字幕文件已存在，跳过: {target_filename}")
                 return False
+            # === [新增逻辑开始] ===
+            # 1. 调用 subtitle_processor 进行时间轴偏移，生成临时文件
+            self.log(f"对字幕文件 {subtitle_file.name} 应用 {SUBTITLE_OFFSET_SECONDS} 秒的偏移...", "INFO")
+            
+            processed_temp_file = subtitle_processor.offset_subtitle(
+                source_path=subtitle_file, 
+                offset_seconds=SUBTITLE_OFFSET_SECONDS, 
+                log_func=self.log
+            )
+
+            if not processed_temp_file:
+                # 偏移处理失败，阻止发布
+                self.log(f"字幕文件偏移处理失败，停止发布: {subtitle_file.name}", "ERROR")
+                return False 
+            # === [新增逻辑结束] ===
             
             # 复制文件（保留源文件）
-            shutil.copy2(str(subtitle_file), str(target_path))
-            self.log(f"字幕文件已复制: {subtitle_file.name} -> {target_filename}")
+            shutil.copy2(str(processed_temp_file), str(target_path))
+            self.log(f"字幕文件已处理并复制: {subtitle_file.name} -> {target_filename}")
             
             self.stats['moved_subtitles'] += 1
             return True
@@ -170,24 +187,59 @@ class GitHubPagesPublisher:
             self.stats['errors'].append(error_msg)
             return False
     
+        finally:
+            # 3. 关键的清理步骤：无论成功或失败，都删除生成的临时文件
+            if processed_temp_file and processed_temp_file.exists():
+                try:
+                    processed_temp_file.unlink()
+                    self.log(f"清理临时文件: {processed_temp_file.name}")
+                except Exception as e:
+                    self.log(f"清理临时字幕文件失败 {processed_temp_file.name}: {e}", "ERROR")
     def load_videos_json(self) -> Dict:
-        """加载videos.json"""
+        """加载历史视频数据（优先读取 jsonl）"""
+        # 1. 定义 jsonl 的路径
+        jsonl_path = VIDEOS_JSON_PATH.with_suffix('.jsonl')
+        videos = []
+    
+        # 2. 如果 jsonl 存在，逐行读取并解析
+        if jsonl_path.exists():
+            try:
+                with open(jsonl_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if line.strip():
+                            videos.append(json.loads(line))
+                self.log(f"从 jsonl 加载了 {len(videos)} 条记录")
+                return {"videos": videos}
+            except Exception as e:
+                self.log(f"读取 jsonl 失败: {e}", "ERROR")
+    
+        # 3. 如果 jsonl 不存在，再尝试读取旧版的 json
         if VIDEOS_JSON_PATH.exists():
             try:
                 with open(VIDEOS_JSON_PATH, 'r', encoding='utf-8') as f:
                     return json.load(f)
             except Exception as e:
-                self.log(f"加载videos.json失败: {e}", "ERROR")
-        return {"videos": []}
+                self.log(f"加载 json 失败: {e}", "ERROR")
     
+        return {"videos": []}
+        
     def save_videos_json(self, data: Dict):
-        """保存videos.json"""
+        """保存videos.json（JSON + JSONL双格式）"""
         try:
-            with open(VIDEOS_JSON_PATH, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            self.log("videos.json已保存")
+            # 保存传统JSON格式（兼容旧版）
+            # with open(VIDEOS_JSON_PATH, 'w', encoding='utf-8') as f:
+            #     json.dump(data, f, ensure_ascii=False, indent=2)
+            # self.log("videos.json已保存")
+
+            # 保存JSONL格式（新版）
+            jsonl_path = VIDEOS_JSON_PATH.with_suffix('.jsonl')
+            with open(jsonl_path, 'w', encoding='utf-8') as f:
+                for video in data['videos']:
+                    f.write(json.dumps(video, ensure_ascii=False) + '\n')
+            self.log(f"videos.jsonl已保存（{len(data['videos'])}条）")
+
         except Exception as e:
-            self.log(f"保存videos.json失败: {e}", "ERROR")
+            self.log(f"保存文件失败: {e}", "ERROR")
     
     def add_video_to_json(self, video_info: Dict) -> bool:
         """添加视频信息到videos.json"""

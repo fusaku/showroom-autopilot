@@ -13,6 +13,23 @@ def log(msg):
 # ========================= 路径配置 =========================
 PARENT_DIR = Path("~/Downloads/Showroom/active").expanduser()  # 所有直播文件夹所在目录
 OUTPUT_DIR = Path("~/Videos/merged").expanduser()  # 输出合并视频和日志的目录
+# GitHub Pages 仓库路径
+GITHUB_PAGES_REPO_PATH = Path("~/fusaku.github.io").expanduser()
+
+# videos.json 文件路径
+VIDEOS_JSON_PATH = GITHUB_PAGES_REPO_PATH / "videos.json"
+
+# 字幕文件目标目录
+SUBTITLES_TARGET_DIR = GITHUB_PAGES_REPO_PATH / "subtitles"
+
+# 字幕文件源目录根路径
+SUBTITLES_SOURCE_ROOT = Path("~/Downloads/Showroom").expanduser()
+
+# 合并后的视频文件目录
+try:
+    from config import OUTPUT_DIR as MERGED_VIDEOS_DIR
+except ImportError:
+    MERGED_VIDEOS_DIR = Path("~/Videos/merged").expanduser()
 
 # ==== 数据库配置 ====
 # 认证信息文件的路径
@@ -152,3 +169,45 @@ YOUTUBE_BACKUP_DIR = OUTPUT_DIR / "uploaded_backup"  # 备份目录
 # ========================= YouTube通知配置 =========================
 YOUTUBE_ENABLE_NOTIFICATIONS = False  # 是否启用上传完成通知
 YOUTUBE_NOTIFICATION_WEBHOOK_URL = ""  # Webhook通知URL（如Discord、Slack等）
+
+# ==================== Git 配置 ====================
+
+# 是否启用Git自动发布
+ENABLE_GIT_AUTO_PUBLISH = True
+
+# Git提交信息模板
+GIT_COMMIT_MESSAGE_TEMPLATE = "Update videos and subtitles - {date} - {count} new videos"
+
+# Git推送到的远程分支
+GIT_REMOTE_BRANCH = "main"
+
+# Git操作超时时间（秒）
+GIT_TIMEOUT = 300
+
+# 是否在Git操作前先拉取最新代码
+GIT_PULL_BEFORE_PUSH = True
+
+# ==================== 发布行为配置 ====================
+
+# 是否在上传完成后自动发布到GitHub Pages
+ENABLE_AUTO_PUBLISH_AFTER_UPLOAD = True
+
+# 每次发布后的延迟时间（秒）
+PUBLISH_DELAY_SECONDS = 30
+
+# ==================== 错误处理配置 ====================
+
+# 遇到错误时是否继续处理其他文件
+CONTINUE_ON_ERROR = True
+
+# 最大重试次数（Git操作）
+MAX_RETRY_ATTEMPTS = 3
+
+# ==================== 字幕文件配置 ====================
+
+# 支持的字幕文件扩展名
+SUBTITLE_EXTENSIONS = ['.ass']
+
+# 【新增】字幕时间轴偏移量（秒）。正数表示字幕时间向后延迟。
+# 根据您的计算，这里设置为 10 秒。
+SUBTITLE_OFFSET_SECONDS = 10

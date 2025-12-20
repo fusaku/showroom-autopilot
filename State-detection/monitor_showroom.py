@@ -54,12 +54,10 @@ def get_db_connection():
         logging.error(f"Oracle数据库连接失败: {e}")
         return None
 
-def save_to_db(member_id, room_id, is_live_flag, started_at, prev_status):
+def save_to_db(member_id, room_id, is_live_flag, started_at, prev_status, member):
     """将数据放入队列,由专门线程写入数据库"""
     # ✅ 只提取之前的 is_live 状态 (布尔值)
     prev_is_live = prev_status.get(member_id, {}).get('is_live', False)
-    # ✅ 添加：获取member的team信息并拆分
-    member = next((m for m in MEMBERS if m["id"] == member_id), None)
     team_full = member.get("team", "") if member else ""
     # 拆分team（假设格式是 "GROUP TEAM"）
     team_parts = team_full.split(" ", 1)
@@ -261,7 +259,7 @@ def is_live(member_id, room_url_key, session):  # ✅ 改成接收 session 参�
         return False, None
 
 def worker_thread(ip, ip_index, members_subset, previous_status, stop_flag, target_cycle_time):
-    thread_name = f"IP-{ip}"
+
     if not members_subset:
         logging.info(f"未分配成员,线程将不执行检测")
         return
@@ -285,6 +283,19 @@ def worker_thread(ip, ip_index, members_subset, previous_status, stop_flag, targ
         while not stop_flag[0]:  # 检查停止标志
             round_start = time.time()
 
+            # ✅ 每轮开始时重新加载成员配置
+            try:
+                from config import get_enabled_members
+                all_members = get_enabled_members()
+                
+                # 重新计算当前线程负责的成员
+                num_ips = len(OUTBOUND_IPS)
+                my_members = [m for i, m in enumerate(all_members) if i % num_ips == ip_index]
+                members_subset = my_members  # 更新本地变量
+                
+            except Exception as e:
+                logging.error(f"重新加载成员配置失败: {e},继续使用旧配置")
+        
             # 检查所有成员
             for i, member in enumerate(members_subset):
                 name_en = member["name_en"]
@@ -310,7 +321,7 @@ def worker_thread(ip, ip_index, members_subset, previous_status, stop_flag, targ
                 is_live_flag, started_at = is_live(member_id, room_url_key, session)
 
                 # 保存到数据库
-                save_to_db(member_id, room_id, is_live_flag, started_at, previous_status)
+                save_to_db(member_id, room_id, is_live_flag, started_at, previous_status, member)
 
                 #更新状态记录
                 with status_lock:
