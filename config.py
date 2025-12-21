@@ -13,6 +13,7 @@ def log(msg):
 # ========================= 路径配置 =========================
 PARENT_DIR = Path("~/Downloads/Showroom/active").expanduser()  # 所有直播文件夹所在目录
 OUTPUT_DIR = Path("~/Videos/merged").expanduser()  # 输出合并视频和日志的目录
+VENV_ACTIVATE_DIR = "/home/ubuntu/venv" #python3 环境路径
 # GitHub Pages 仓库路径
 GITHUB_PAGES_REPO_PATH = Path("~/fusaku.github.io").expanduser()
 
@@ -128,7 +129,7 @@ YOUTUBE_TOKEN_PATH_ALT = BASE_DIR / "credentials" / "48g-SR" / "youtube_token.pi
 YOUTUBE_SCOPES = ["https://www.googleapis.com/auth/youtube.force-ssl"]
 
 # ========================= YouTube上传配置 =========================
-MEMBERS_JSON_PATH = BASE_DIR / "members.json"  # 成员配置文件路径
+MEMBERS_YAML_PATH = BASE_DIR / "data" / "AKB48_members.yaml"  # 成员配置文件路径
 # 视频默认设置
 YOUTUBE_DEFAULT_TITLE = ""  # 默认标题（空字符串时使用文件名）
 YOUTUBE_DEFAULT_DESCRIPTION = """
@@ -210,4 +211,4 @@ SUBTITLE_EXTENSIONS = ['.ass']
 
 # 【新增】字幕时间轴偏移量（秒）。正数表示字幕时间向后延迟。
 # 根据您的计算，这里设置为 10 秒。
-SUBTITLE_OFFSET_SECONDS = 10
+SUBTITLE_OFFSET_SECONDS = 15

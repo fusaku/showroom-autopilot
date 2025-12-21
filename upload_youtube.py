@@ -5,6 +5,7 @@ import os
 import shutil
 import json
 import signal
+import yaml
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -27,14 +28,20 @@ CHUNK_TIMEOUT_SECONDS = 30 # 30秒
 
 # 加载成员配置
 def load_members_config():
-    """从 members.json 加载成员配置"""
+    """从 AKB48_members.yaml 加载成员配置"""
+    # 确保使用正确的变量名
     try:
-        with open(MEMBERS_JSON_PATH, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+        with open(MEMBERS_YAML_PATH, 'r', encoding='utf-8') as f:
+            # 建议加上 Loader 避免警告
+            data = yaml.load(f, Loader=yaml.FullLoader) 
+            
+            # 如果 yaml 文件内容为空，data 会是 None，需要做容错处理
+            if not data:
+                return []
             return data.get('members', [])
     except Exception as e:
         if DEBUG_MODE:
-            log(f"加载 members.json 失败: {e}")
+            log(f"加载 {MEMBERS_YAML_PATH.name} 失败: {e}")
         return []
 
 class FileLock:

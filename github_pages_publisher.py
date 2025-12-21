@@ -68,6 +68,8 @@ class GitHubPagesPublisher:
             'errors': []
         }
     
+        self._video_cache = None
+
     def log(self, message: str, level: str = "INFO"):
         """日志输出"""
         if VERBOSE_LOGGING or level in ["ERROR", "WARNING"]:
@@ -196,35 +198,48 @@ class GitHubPagesPublisher:
                 except Exception as e:
                     self.log(f"清理临时字幕文件失败 {processed_temp_file.name}: {e}", "ERROR")
     def load_videos_json(self) -> Dict:
-        """加载历史视频数据（优先读取 jsonl）"""
-        # 1. 定义 jsonl 的路径
+        """加载历史视频数据（优先从缓存读取，其次读取 jsonl）"""
+        # 1. 检查缓存：如果已经加载过，直接返回内存中的数据
+        if self._video_cache is not None:
+            return self._video_cache
+
+        # 2. 定义 jsonl 的路径
         jsonl_path = VIDEOS_JSON_PATH.with_suffix('.jsonl')
         videos = []
     
-        # 2. 如果 jsonl 存在，逐行读取并解析
+        # 3. 如果 jsonl 存在，逐行读取并解析
         if jsonl_path.exists():
             try:
                 with open(jsonl_path, 'r', encoding='utf-8') as f:
                     for line in f:
                         if line.strip():
                             videos.append(json.loads(line))
+                
                 self.log(f"从 jsonl 加载了 {len(videos)} 条记录")
-                return {"videos": videos}
+                # 将结果存入缓存
+                self._video_cache = {"videos": videos}
+                return self._video_cache
             except Exception as e:
                 self.log(f"读取 jsonl 失败: {e}", "ERROR")
     
-        # 3. 如果 jsonl 不存在，再尝试读取旧版的 json
+        # 4. 如果 jsonl 不存在，再尝试读取旧版的 json
         if VIDEOS_JSON_PATH.exists():
             try:
                 with open(VIDEOS_JSON_PATH, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    # 将结果存入缓存
+                    self._video_cache = data
+                    return data
             except Exception as e:
                 self.log(f"加载 json 失败: {e}", "ERROR")
     
-        return {"videos": []}
+        # 5. 如果都没有，初始化空缓存
+        self._video_cache = {"videos": []}
+        return self._video_cache
         
     def save_videos_json(self, data: Dict):
         """保存videos.json（JSON + JSONL双格式）"""
+        self._video_cache = data
         try:
             # 保存传统JSON格式（兼容旧版）
             # with open(VIDEOS_JSON_PATH, 'w', encoding='utf-8') as f:

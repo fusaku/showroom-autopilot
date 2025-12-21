@@ -250,8 +250,7 @@ def upload_if_needed(success_count):
         
         try:
             # 1. 配置路径
-            VENV_ACTIVATE_DIR = "/home/ubuntu/venv"
-            script_path = Path("/home/ubuntu/live-merge-up") / "upload_youtube.py"
+            script_path = Path(__file__).parent / "upload_youtube.py"
             
             # 2. 构造命令 (必须带 -u 确保无缓冲)
             full_command = f"source {VENV_ACTIVATE_DIR}/bin/activate && python3 -u {str(script_path)}"

@@ -1,6 +1,6 @@
-import json
 import sys
 import os
+import yaml
 from pathlib import Path
 
 # ==== 多IP配置 ====
@@ -60,22 +60,22 @@ LOG_DIR = Path("~/logs").expanduser()
 LOG_DIR.mkdir(exist_ok=True)
 
 # ==== 成员配置 ====
-MEMBERS_FILE = Path(__file__).parent / "members.json"
+MEMBERS_FILE = Path(__file__).parent.parent / "data" / "AKB48_members.yaml"
 
 def load_members():
-    """从 members.json 加载成员配置"""
+    """从 AKB48_members.yaml 加载成员配置"""
     if not MEMBERS_FILE.exists():
         print(f"错误: 找不到 {MEMBERS_FILE}")
         sys.exit(1)
     
     with open(MEMBERS_FILE, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+        data = yaml.safe_load(f)
     
     # 只返回 enabled=True 的成员
     enabled = [m for m in data.get("members", []) if m.get("enabled", False)]
     
     if not enabled:
-        print("错误: members.json 中没有启用的成员")
+        print("错误: AKB48_members.yaml 中没有启用的成员")
         sys.exit(1)
     
     return enabled

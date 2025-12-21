@@ -822,6 +822,13 @@ def main_loop():
         log(f"主循环发生错误: {e}")
         import traceback
         log(traceback.format_exc())
+    finally: 
+        if db_pool:
+            try:
+                db_pool.close()
+                log("数据库连接池已关闭")
+            except:
+                pass
 
 if __name__ == "__main__":
     main_loop()
