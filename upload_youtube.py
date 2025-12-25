@@ -524,6 +524,8 @@ def upload_video(
 
         except HttpError as e:
             if e.resp.status == 403 and 'quotaExceeded' in str(e):
+                global LAST_QUOTA_EXHAUSTED_DATE
+                LAST_QUOTA_EXHAUSTED_DATE = get_today_utc_date_str()
                 log("上传配额已用尽")
                 raise  # 重新抛出配额错误
             else:
@@ -585,6 +587,8 @@ def handle_merged_video(mp4_path: Path) -> bool:
         video_id = upload_video(str(mp4_path))
     except HttpError as e:
         if e.resp.status == 403 and 'quotaExceeded' in str(e):
+            global LAST_QUOTA_EXHAUSTED_DATE
+            LAST_QUOTA_EXHAUSTED_DATE = get_today_utc_date_str()
             log("检测到上传配额用尽，暂停上传，等待配额重置后继续。")
             return False
         else:
@@ -671,54 +675,92 @@ def upload_all_pending_videos(directory: Path = None):
 
 def _upload_all_pending_videos_internal(directory: Path):
     """
-    在一次运行中循环扫描，直到目录下没有任何待上传文件。
+    内部上传函数:扫描并上传所有待处理视频
+    - 一般错误(网络超时、临时故障):跳过当前视频,继续下一个
+    - 严重错误(配额耗尽):立即停止所有上传
     """
     global LAST_QUOTA_EXHAUSTED_DATE
-
+    
     if not directory.exists():
         log(f"目录不存在: {directory}")
         return
 
-    # 循环：只要有文件，就一直处理
+    log("=" * 60)
+    log("开始扫描待上传视频...")
+    log("=" * 60)
+
     while True:
         today_str = get_today_utc_date_str()
-        retry_time = get_next_retry_time_japan()
-
-        # 1. 检查配额状态
+        
+        # ========== 1. 检查配额状态 ==========
         if YOUTUBE_ENABLE_QUOTA_MANAGEMENT and LAST_QUOTA_EXHAUSTED_DATE == today_str:
-            log(f"检测到配额已耗尽，退出循环。下次重试时间: {retry_time}")
+            log("⚠️  检测到配额已耗尽,停止上传")
+            log(f"📅 下次重试时间: {get_next_retry_time_japan()}")
             return
 
-        # 2. 重新扫描目录（这是关键，能看到 merger.py 刚刚生成的新文件）
+        # ========== 2. 扫描待上传文件 ==========
         mp4_files = sorted(directory.glob("*.mp4"))
         pending_files = [f for f in mp4_files if not is_uploaded(f)]
 
-        # 如果没有待上传文件，说明彻底传完了，跳出循环结束进程
         if not pending_files:
-            log("扫描完成：当前目录下没有待上传的视频。")
+            log("✅ 扫描完成:没有待上传的视频")
             break
 
-        log(f"本轮发现 {len(pending_files)} 个待上传视频")
+        log(f"📦 找到 {len(pending_files)} 个待上传视频")
+        log("-" * 60)
 
-        # 3. 逐个处理本轮发现的文件
-        for mp4_file in pending_files:
-            log(f"正在处理: {mp4_file.name}")
+        # ========== 3. 逐个处理视频 ==========
+        for idx, mp4_file in enumerate(pending_files, 1):
+            log(f"[{idx}/{len(pending_files)}] 正在处理: {mp4_file.name}")
             
-            success = handle_merged_video(mp4_file)
-            
-            if not success:
-                # 如果是配额问题或严重错误，记录日期并退出整个函数
-                if YOUTUBE_ENABLE_QUOTA_MANAGEMENT:
-                    LAST_QUOTA_EXHAUSTED_DATE = today_str
-                log("上传过程中止，退出程序。")
-                return 
+            try:
+                success = handle_merged_video(mp4_file)
+                
+                if success:
+                    log(f"✅ {mp4_file.name} 上传成功")
+                    time.sleep(10)  # 视频间间隔
+                    
+                else:
+                    # handle_merged_video 返回 False 有两种情况:
+                    # 1. 配额耗尽 (已设置 LAST_QUOTA_EXHAUSTED_DATE)
+                    # 2. 普通上传失败
+                    
+                    # 检查是否是配额问题
+                    if YOUTUBE_ENABLE_QUOTA_MANAGEMENT and LAST_QUOTA_EXHAUSTED_DATE == today_str:
+                        log("🛑 检测到配额耗尽,停止后续上传")
+                        return  # 严重错误:立即退出
+                    
+                    # 普通失败:跳过并继续
+                    log(f"⚠️  {mp4_file.name} 上传失败,跳过并继续下一个")
+                    continue
 
-            # 每个视频间的间隔
-            if len(pending_files) > 1:
-                log(f"剩余 {len(pending_files)} 个视频,10秒后上传")
-                time.sleep(10)
+            except HttpError as e:
+                # HttpError 应该在 handle_merged_video 中被捕获
+                # 如果到这里说明有漏网之鱼
+                if e.resp.status == 403 and 'quotaExceeded' in str(e):
+                    LAST_QUOTA_EXHAUSTED_DATE = get_today_utc_date_str()
+                    log("🛑 检测到配额耗尽(顶层捕获),停止上传")
+                    return  # 严重错误:立即退出
+                else:
+                    log(f"❌ {mp4_file.name} 发生HTTP错误: {e}")
+                    send_upload_notification(mp4_file.name, "", False)
+                    continue  # 一般错误:跳过并继续
 
-        log("本轮文件处理完毕，准备进行下一次目录扫描...")
+            except Exception as e:
+                # 捕获所有其他异常,防止整个进程崩溃
+                log(f"❌ {mp4_file.name} 发生未知错误: {e}")
+                import traceback
+                log(f"详细堆栈:\n{traceback.format_exc()}")
+                continue  # 一般错误:跳过并继续
+
+        # ========== 4. 本轮处理完毕,重新扫描 ==========
+        log("-" * 60)
+        log("本轮处理完毕,重新扫描以检测新生成的视频...")
+        log("")
+
+    log("=" * 60)
+    log("所有视频处理完毕")
+    log("=" * 60)
 
 def save_upload_info(file_path: Path, video_id: str, title: str, description: str, tags: list, upload_time: str):
     """保存上传信息到JSON文件"""
