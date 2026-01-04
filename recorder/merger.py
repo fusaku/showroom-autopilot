@@ -3,8 +3,12 @@ import subprocess
 import fcntl
 import os
 import re
+import logging
+import sys
 from collections import defaultdict
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent / "shared"))
 from config import *
 
 try:
@@ -12,7 +16,7 @@ try:
     UPLOAD_AVAILABLE = True
 except ImportError:
     UPLOAD_AVAILABLE = False
-    log("上传模块不可用，跳过自动上传功能")
+    logging.warning("上传模块不可用，跳过自动上传功能")
 
 class FileLock:
     """文件锁类，防止多个进程同时处理同一个文件"""
@@ -166,28 +170,28 @@ def merge_item(item: dict) -> bool:
     lock_file = LOCK_DIR / f"{name}.merge.lock"
     
     if not filelist_txt.exists():
-        log(f"{name} 没有 {FILELIST_NAME}，跳过合并")
+        logging.debug(f"{name} 没有 {FILELIST_NAME}，跳过合并")
         return False
 
     if output_file.exists():
-        log(f"跳过已合并：{name}")
+        logging.debug(f"跳过已合并：{name}")
         return True
 
     # 使用文件锁防止重复合并
     with FileLock(lock_file, MERGE_LOCK_TIMEOUT) as lock:
         if lock is None:
-            log(f"{name} 正在被其他进程合并，跳过")
+            logging.debug(f"{name} 正在被其他进程合并，跳过")
             return False
         
         # 再次检查文件是否存在（双重检查）
         if output_file.exists():
-            log(f"跳过已合并：{name}")
+            logging.debug(f"跳过已合并：{name}")
             return True
         
         # 确保输出目录存在
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-        log(f"开始合并 {name} -> {output_file}")
+        logging.info(f"开始合并 {name} -> {output_file}")
         
         # 构建 FFmpeg 命令
         ffmpeg_cmd = ["ffmpeg"]
@@ -198,13 +202,18 @@ def merge_item(item: dict) -> bool:
         ffmpeg_cmd.extend([
             "-loglevel", FFMPEG_LOGLEVEL,
             "-f", "concat", "-safe", "0", "-i", str(filelist_txt),
-            "-c", "copy", str(output_file)
+            "-c", "copy",
+            "-movflags", "+faststart",
+            str(output_file)
         ])
         
-        result = subprocess.run(ffmpeg_cmd)
+        result = subprocess.run(
+            ffmpeg_cmd,
+            preexec_fn=lambda: os.nice(10)  # 降低优先级 (0-19,越大越低)
+        )
 
         if result.returncode == 0:
-            log(f"{name} 合并完成")
+            logging.info(f"{name} 合并完成")
             # --- 修改部分：统一为所有相关的原始文件夹添加标记 ---
             timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
             for folder in item['folders']:  # 无论 single 还是 merged，folders 列表里都有目标文件夹
@@ -216,12 +225,12 @@ def merge_item(item: dict) -> bool:
                         f"Output File: {name}{OUTPUT_EXTENSION}\n"
                     )
                     marker_file.write_text(marker_content, encoding='utf-8')
-                    log(f"已为文件夹 {folder.name} 添加合并标记")
+                    logging.debug(f"已为文件夹 {folder.name} 添加合并标记")
                 except Exception as e:
-                    log(f"无法为 {folder.name} 创建标记文件: {e}")
+                    logging.error(f"无法为 {folder.name} 创建标记文件: {e}")
             return True
         else:
-            log(f"{name} 合并失败，请检查 ffmpeg 日志")
+            logging.error(f"{name} 合并失败，请检查 ffmpeg 日志")
             return False
 
 def merge_all_ready():
@@ -229,24 +238,24 @@ def merge_all_ready():
     ready_items = find_ready_folders(PARENT_DIR)
     
     if not ready_items:
-        log("没有找到待合并的文件夹")
+        logging.debug("没有找到待合并的文件夹")
         return 0
     
-    log(f"找到 {len(ready_items)} 个待合并的文件夹")
+    logging.info(f"找到 {len(ready_items)} 个待合并的文件夹")
     
     success_count = 0
     for folder in ready_items:
         if merge_item(folder):
             success_count += 1
 
-    log(f"成功合并 {success_count} 个视频")
+    logging.info(f"成功合并 {success_count} 个视频")
     return success_count
 
 def upload_if_needed(success_count):
     """如果合并成功，通过外部进程异步启动上传任务"""
     
     if ENABLE_AUTO_UPLOAD and success_count > 0 and UPLOAD_AVAILABLE:
-        log("🎬 [异步触发] 正在启动独立上传进程...")
+        logging.info("🎬 [异步触发] 正在启动独立上传进程...")
         
         try:
             # 1. 配置路径
@@ -269,10 +278,10 @@ def upload_if_needed(success_count):
                 start_new_session=True 
             )
             
-            log("✅ 上传指令已发出，日志将自动追加到当前服务日志文件中。")
+            logging.info("✅ 上传指令已发出，日志将自动追加到当前服务日志文件中。")
             
         except Exception as e:
-            log(f"🚨 [启动上传失败]: {e}")
+            logging.error(f"🚨 [启动上传失败]: {e}")
 
 def merge_once(target_folders=None):  # 改成复数
     """执行一次合并操作

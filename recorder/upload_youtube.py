@@ -5,10 +5,14 @@ import os
 import shutil
 import json
 import signal
-import yaml
-
+import logging
+import traceback
+import re
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent / "shared"))
 from zoneinfo import ZoneInfo
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -19,30 +23,16 @@ from github_pages_publisher import publish_to_github_pages
 from config import *
 
 # 全局变量
-LAST_QUOTA_EXHAUSTED_DATE = None
+LAST_QUOTA_EXHAUSTED_DATE = {
+    'account1': None,  # 主账号(橋本陽菜)
+    'account2': None,  # 副账号(AKB48成员)
+    'account3': None   # 第三账号(其他成员)
+}
 JST = ZoneInfo("Asia/Tokyo")
 PACIFIC = ZoneInfo("America/Los_Angeles")
 MAX_RETRIES = 5  # 最大重试次数
 UPLOAD_DELAY = 60 # 每次重试等待时间（秒）
 CHUNK_TIMEOUT_SECONDS = 30 # 30秒
-
-# 加载成员配置
-def load_members_config():
-    """从 AKB48_members.yaml 加载成员配置"""
-    # 确保使用正确的变量名
-    try:
-        with open(MEMBERS_YAML_PATH, 'r', encoding='utf-8') as f:
-            # 建议加上 Loader 避免警告
-            data = yaml.load(f, Loader=yaml.FullLoader) 
-            
-            # 如果 yaml 文件内容为空，data 会是 None，需要做容错处理
-            if not data:
-                return []
-            return data.get('members', [])
-    except Exception as e:
-        if DEBUG_MODE:
-            log(f"加载 {MEMBERS_YAML_PATH.name} 失败: {e}")
-        return []
 
 class FileLock:
     """文件锁类，防止多个进程同时处理同一个文件"""
@@ -82,41 +72,53 @@ class FileLock:
             except:
                 pass
 
+
+import re
+
 def convert_title_to_japanese(title: str) -> str:
     """
-    将标题中的英文名字转换为日文名字
-    
-    Args:
-        title: 原始标题
-    
-    Returns:
-        转换后的标题
+    将标题从: [日期/平台] - [各种队伍信息] [英文名] [时间戳]
+    转换为: [日期/平台] - [日文名] ([日文队伍]) [时间戳]
     """
-    converted_title = title
+    # 1. 重新加载成员配置
+    logging.debug(f"已重新加载成员配置，共 {len(ENABLED_MEMBERS)} 个成员")
 
-    # ========== 每次上传前重新加载members.json ==========
-    MEMBERS = load_members_config()
-    if VERBOSE_LOGGING:
-        log(f"已重新加载成员配置，共 {len(MEMBERS)} 个成员")
-    # ============================================================
+    converted_title = title
     
-    # 遍历所有成员，进行名字转换
-    for member in MEMBERS:
-        en_name = member.get('name_en', '')
-        jp_name = member.get('name_jp', '')
-        
-        if en_name and jp_name:
-            # 将英文名替换为日文名
-            converted_title = converted_title.replace(en_name, jp_name)
+    # 2. 使用正则表达式拆分文件名
+    # ^(.*? \- ) : 匹配开头直到 " - "（捕获日期和平台）
+    # (.*)        : 匹配中间的所有内容（包含队伍信息和英文名）
+    # \s(\d{6})$  : 匹配结尾前的空格 + 6位数字时间戳
+    match = re.match(r"^(.*? \- )(.*)\s(\d{6})$", title)
     
-    if DEBUG_MODE and converted_title != title:
-        log(f"标题转换: {title} -> {converted_title}")
-    
+    if match:
+        prefix = match.group(1)      # 例如: "251227 Showroom - "
+        middle_content = match.group(2) # 例如: "AKB48 Draft 3rd Gen Kudo Kasumi"
+        timestamp = match.group(3)   # 例如: "221745"
+
+        # 3. 在中间内容中匹配成员
+        for member in ENABLED_MEMBERS:
+            en_name = member.get('name_en', '')
+            jp_name = member.get('name_jp', '')
+            team_jp = member.get('team', '') # 从 YAML 读取日文队伍名
+            
+            # 只要成员的英文名出现在中间这一段字符串里
+            if en_name and en_name in middle_content:
+                # 按照您要求的格式重新组装：名字 (队伍)
+                if team_jp:
+                    new_middle = f"{jp_name}({team_jp})"
+                else:
+                    new_middle = jp_name
+                
+                converted_title = f"{prefix}{new_middle} {timestamp}"
+                logging.debug(f"成功转换标题: {title} -> {converted_title}")
+                break # 匹配到成员后跳出循环
+
     return converted_title
 
-def get_today_utc_date_str():
-    """获取今天的UTC日期字符串"""
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+def get_today_pacific_date_str():
+    """获取今天的太平洋时间日期字符串（用于配额管理）"""
+    return datetime.now(PACIFIC).strftime("%Y-%m-%d")
 
 def get_next_retry_time_japan():
     """获取下次重试时间（太平洋时间0点对应的日本时间）"""
@@ -149,8 +151,7 @@ def get_authenticated_service():
             with open(YOUTUBE_TOKEN_PATH, "rb") as token_file:
                 creds = pickle.load(token_file)
         except Exception as e:
-            if DEBUG_MODE:
-                log(f"加载token失败: {e}")
+            logging.error(f"加载token失败: {e}")
             creds = None
 
     # 检查凭据是否有效
@@ -159,8 +160,7 @@ def get_authenticated_service():
             try:
                 creds.refresh(Request())
             except Exception as e:
-                if DEBUG_MODE:
-                    log(f"刷新token失败: {e}")
+                logging.error(f"刷新token失败: {e}")
                 creds = None
         
         # 如果凭据无效，重新认证
@@ -178,8 +178,7 @@ def get_authenticated_service():
             with open(YOUTUBE_TOKEN_PATH, "wb") as token_file:
                 pickle.dump(creds, token_file)
         except Exception as e:
-            if DEBUG_MODE:
-                log(f"保存token失败: {e}")
+            logging.error(f"保存token失败: {e}")
 
     return build("youtube", "v3", credentials=creds)
 
@@ -193,8 +192,7 @@ def get_authenticated_service_alt():
             with open(YOUTUBE_TOKEN_PATH_ALT, "rb") as token_file:
                 creds = pickle.load(token_file)
         except Exception as e:
-            if DEBUG_MODE:
-                log(f"加载副账号token失败: {e}")
+            logging.error(f"加载副账号token失败: {e}")
             creds = None
 
     # 检查凭据是否有效
@@ -203,8 +201,7 @@ def get_authenticated_service_alt():
             try:
                 creds.refresh(Request())
             except Exception as e:
-                if DEBUG_MODE:
-                    log(f"刷新副账号token失败: {e}")
+                logging.error(f"刷新副账号token失败: {e}")
                 creds = None
         
         # 如果凭据无效,重新认证
@@ -223,8 +220,49 @@ def get_authenticated_service_alt():
             with open(YOUTUBE_TOKEN_PATH_ALT, "wb") as token_file:
                 pickle.dump(creds, token_file)
         except Exception as e:
-            if DEBUG_MODE:
-                log(f"保存副账号token失败: {e}")
+            logging.error(f"保存副账号token失败: {e}")
+
+    return build("youtube", "v3", credentials=creds)
+
+def get_authenticated_service_third():
+    """获取第三个账号的已认证YouTube服务对象"""
+    creds = None
+    
+    # 加载已保存的凭据
+    if YOUTUBE_TOKEN_PATH_THIRD.exists():
+        try:
+            with open(YOUTUBE_TOKEN_PATH_THIRD, "rb") as token_file:
+                creds = pickle.load(token_file)
+        except Exception as e:
+            logging.error(f"加载第三个账号token失败: {e}")
+            creds = None
+
+    # 检查凭据是否有效
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            try:
+                creds.refresh(Request())
+            except Exception as e:
+                logging.error(f"刷新第三个账号token失败: {e}")
+                creds = None
+        
+        # 如果凭据无效,重新认证
+        if not creds:
+            if not YOUTUBE_CLIENT_SECRET_PATH_THIRD.exists():
+                raise FileNotFoundError(f"第三个账号客户端密钥文件不存在: {YOUTUBE_CLIENT_SECRET_PATH_THIRD}")
+            
+            flow = InstalledAppFlow.from_client_secrets_file(
+                str(YOUTUBE_CLIENT_SECRET_PATH_THIRD), YOUTUBE_SCOPES
+            )
+            creds = flow.run_local_server(port=0)
+
+        # 保存凭据
+        try:
+            YOUTUBE_TOKEN_PATH_THIRD.parent.mkdir(parents=True, exist_ok=True)
+            with open(YOUTUBE_TOKEN_PATH_THIRD, "wb") as token_file:
+                pickle.dump(creds, token_file)
+        except Exception as e:
+            logging.error(f"保存第三个账号token失败: {e}")
 
     return build("youtube", "v3", credentials=creds)
 
@@ -246,10 +284,9 @@ def handle_post_upload_actions(file_path: Path):
     if YOUTUBE_DELETE_AFTER_UPLOAD:
         try:
             file_path.unlink()
-            if VERBOSE_LOGGING:
-                log(f"已删除本地文件: {file_path.name}")
+            logging.info(f"已删除本地文件: {file_path.name}")
         except Exception as e:
-            log(f"删除文件失败: {e}")
+            logging.error(f"删除文件失败: {e}")
     
     elif YOUTUBE_MOVE_AFTER_UPLOAD:
         try:
@@ -263,10 +300,9 @@ def handle_post_upload_actions(file_path: Path):
                 backup_path = YOUTUBE_BACKUP_DIR / f"{file_path.stem}_{timestamp}{file_path.suffix}"
             
             shutil.move(str(file_path), str(backup_path))
-            if VERBOSE_LOGGING:
-                log(f"已移动文件到备份目录: {backup_path.name}")
+            logging.info(f"已移动文件到备份目录: {backup_path.name}")
         except Exception as e:
-            log(f"移动文件失败: {e}")
+            logging.error(f"移动文件失败: {e}")
 
 def send_upload_notification(file_name: str, video_id: str, success: bool = True):
     """发送上传完成通知"""
@@ -285,11 +321,9 @@ def send_upload_notification(file_name: str, video_id: str, success: bool = True
         payload = {"content": message}
         
         requests.post(YOUTUBE_NOTIFICATION_WEBHOOK_URL, json=payload, timeout=10)
-        if VERBOSE_LOGGING:
-            log(f"已发送通知: {file_name}")
+        logging.info(f"已发送通知: {file_name}")
     except Exception as e:
-        if DEBUG_MODE:
-            log(f"发送通知失败: {e}")
+        logging.error(f"发送通知失败: {e}")
 
 def add_video_to_playlist(youtube, video_id: str, playlist_id: str):
     """将视频添加到播放列表"""
@@ -307,11 +341,10 @@ def add_video_to_playlist(youtube, video_id: str, playlist_id: str):
             }
         )
         response = request.execute()
-        if VERBOSE_LOGGING:
-            log(f"已添加视频 {video_id} 到播放列表 {playlist_id}")
+        logging.info(f"已添加视频 {video_id} 到播放列表 {playlist_id}")
         return True
     except HttpError as e:
-        log(f"添加到播放列表失败: {e}")
+        logging.error(f"添加到播放列表失败: {e}")
         return False
 
 def upload_video(
@@ -333,50 +366,60 @@ def upload_video(
 
     file_path_obj = Path(file_path)
     if not file_path_obj.exists():
-        log(f"文件不存在: {file_path}")
+        logging.warning(f"文件不存在: {file_path}")
         return None
 
     # ========== 每次上传前重新加载members.json ==========
-    MEMBERS = load_members_config()
-    if VERBOSE_LOGGING:
-        log(f"已重新加载成员配置，共 {len(MEMBERS)} 个成员")
+
+    logging.debug(f"已重新加载成员配置，共 {len(ENABLED_MEMBERS)} 个成员")
 
     # 判断是否是橋本陽菜的视频
     # 检查文件名中是否包含橋本陽菜的英文或日文名
-    is_hashimoto = False
-    for member in MEMBERS:
-        if member.get('id') == 'hashimoto_haruna':
-            en_name = member.get('name_en', '')
-            jp_name = member.get('name_jp', '')
-            
-            if en_name in file_path_obj.stem or jp_name in file_path_obj.stem:
-                is_hashimoto = True
-                break
-    
+    member_team = None
+    is_haruna = False
+    account_id = None
+
+    for member in ENABLED_MEMBERS:
+        en_name = member.get('name_en', '')
+        if en_name and en_name in file_path_obj.stem:
+            if en_name == 'Hashimoto Haruna':
+                is_haruna = True
+            member_team = member.get('team', '')
+            break
+
     try:
-        if is_hashimoto:
+        if is_haruna:
+            # 橋本陽菜用主账号
             youtube = get_authenticated_service()
-            if VERBOSE_LOGGING:
-                log("使用主账号上传 (橋本陽菜)")
-        else:
+            account_id = 'account1'
+            logging.info(f"使用主账号上传: {file_path}")
+        elif member_team and 'AKB48' in member_team:
+            # AKB48成员用副账号
             youtube = get_authenticated_service_alt()
-            if VERBOSE_LOGGING:
-                log("使用副账号上传 (其他成员)")
+            account_id = 'account2'
+            logging.info(f"使用副账号上传(AKB48): {file_path}")
+        else:
+            # 其他成员暂时跳过上传
+            # youtube = get_authenticated_service_third()
+            # account_id = 'account3'
+            # logging.info(f"使用第三个账号上传(非AKB48成员): {file_path}")
+
+            logging.error("第三个账号已禁用")
+            return None
     except Exception as e:
-        log(f"获取YouTube服务失败: {e}")
+        logging.error(f"获取YouTube服务失败: {e}")
         return None
     
     # 检测视频属于哪个成员,并获取其YouTube配置
     member_config = None
-    for member in MEMBERS:
+    for member in ENABLED_MEMBERS:
         en_name = member.get('name_en', '')
         jp_name = member.get('name_jp', '')
 
         if (en_name and en_name in file_path_obj.stem) or \
            (jp_name and jp_name in file_path_obj.stem):
             member_config = member.get('youtube', {})
-            if VERBOSE_LOGGING:
-                log(f"检测到成员: {jp_name or en_name}")
+            logging.debug(f"检测到成员: {jp_name or en_name}")
             break
 
     # 使用配置的默认值和文件名处理标题
@@ -419,8 +462,7 @@ def upload_video(
         # 优先使用成员配置的播放列表
         if member_config and member_config.get('playlist_id'):
             playlist_id = member_config['playlist_id']
-            if VERBOSE_LOGGING:
-                log(f"使用成员播放列表: {playlist_id}")
+            logging.debug(f"使用成员播放列表: {playlist_id}")
         else:
             playlist_id = YOUTUBE_PLAYLIST_ID
     
@@ -447,16 +489,16 @@ def upload_video(
         )
         # 这个设置确保 next_chunk 在 180 秒内必须返回。
         request.http.timeout = CHUNK_TIMEOUT_SECONDS 
-        log(f"已设置 HTTP 请求超时为 {CHUNK_TIMEOUT_SECONDS} 秒")
+        logging.debug(f"已设置 HTTP 请求超时为 {CHUNK_TIMEOUT_SECONDS} 秒")
     except Exception as e:
-        log(f"创建上传请求失败: {e}")
+        logging.error(f"创建上传请求失败: {e}")
         return None
 
     # 执行上传
     retry_count = 0
     response = None
-    log(f"开始上传: {file_path_obj.name}")
-    log(f"视频标题: {title}")
+    logging.info(f"开始上传: {file_path_obj.name}")
+    logging.info(f"视频标题: {title}")
 
     # 使用外部 while 循环来处理重试
     while retry_count < MAX_RETRIES:        
@@ -464,11 +506,18 @@ def upload_video(
         try:
             # 如果是重试，重新获取 youtube 服务
             if retry_count > 0:
-                log("重新获取YouTube服务...")
-                if is_hashimoto:
+                logging.info("重新获取YouTube服务...")
+                if is_haruna:  # ✅ 修复变量名
                     youtube = get_authenticated_service()
-                else:
+                    account_id = 'account1'
+                elif member_team and 'AKB48' in member_team:  # ✅ 增加AKB48判断
                     youtube = get_authenticated_service_alt()
+                    account_id = 'account2'
+                else:  # ✅ 增加第三个账号
+                    # youtube = get_authenticated_service_third()
+                    account_id = 'account3'
+                    logging.error("第三个账号已禁用")
+                    return None
 
             # 创建新的上传请求
             media = MediaFileUpload(file_path, chunksize=128 * 1024 * 1024, resumable=True)
@@ -480,9 +529,9 @@ def upload_video(
             request.http.timeout = CHUNK_TIMEOUT_SECONDS
 
             if retry_count > 0:
-                log(f"已创建新的上传会话 (重试 {retry_count}/{MAX_RETRIES})")
+                logging.info(f"已创建新的上传会话 (重试 {retry_count}/{MAX_RETRIES})")
         except Exception as e:
-            log(f"创建上传请求失败: {e}")
+            logging.error(f"创建上传请求失败: {e}")
             retry_count += 1
             if retry_count < MAX_RETRIES:
                 time.sleep(UPLOAD_DELAY)
@@ -501,7 +550,7 @@ def upload_video(
 
                     if status:
                         progress = int(status.progress() * 100)
-                        log(f"上传进度: {progress}% (重试 {retry_count}/{MAX_RETRIES})")    
+                        logging.info(f"上传进度: {progress}% (重试 {retry_count}/{MAX_RETRIES})")    
 
                 except UploadTimeout:
                     signal.alarm(0)  # 取消闹钟
@@ -511,47 +560,50 @@ def upload_video(
             break
 
         except UploadTimeout as e:
-            log(f"上传块在 {CHUNK_TIMEOUT_SECONDS} 秒内无响应")
+            logging.info(f"上传块在 {CHUNK_TIMEOUT_SECONDS} 秒内无响应")
             retry_count += 1
             response = None  # 重置
 
             if retry_count < MAX_RETRIES:
-                log(f"等待 {UPLOAD_DELAY} 秒后重试 ({retry_count}/{MAX_RETRIES})...")
+                logging.info(f"等待 {UPLOAD_DELAY} 秒后重试 ({retry_count}/{MAX_RETRIES})...")
                 time.sleep(UPLOAD_DELAY)
             else:
-                log(f"达到最大重试次数 ({MAX_RETRIES})，上传失败。")
+                logging.error(f"达到最大重试次数 ({MAX_RETRIES})，上传失败。")
                 break
 
         except HttpError as e:
-            if e.resp.status == 403 and 'quotaExceeded' in str(e):
+            error_str = str(e)
+            # 检测各种配额相关错误（quotaExceeded 和 uploadLimitExceeded）
+            if 'quotaExceeded' in error_str or 'uploadLimitExceeded' in error_str:
                 global LAST_QUOTA_EXHAUSTED_DATE
-                LAST_QUOTA_EXHAUSTED_DATE = get_today_utc_date_str()
-                log("上传配额已用尽")
-                raise  # 重新抛出配额错误
+                LAST_QUOTA_EXHAUSTED_DATE[account_id] = get_today_pacific_date_str()
+                logging.error(f"账号 {account_id} 配额已用尽: {e}")
+                raise  # 重新抛出配额错误，让外层停止所有上传
             else:
-                log(f"上传失败: {e}")
+                logging.error(f"上传失败: {e}")
                 return None
 
         except Exception as e:
             # 捕获其他未知错误，并进行重试
-            log(f"上传过程中出现未知错误 (重试 {retry_count+1}/{MAX_RETRIES}): {e}")
+            logging.warning(f"上传过程中出现未知错误 (重试 {retry_count+1}/{MAX_RETRIES}): {e}")
             retry_count += 1
+            response = None
             if retry_count < MAX_RETRIES:
-                log(f"等待 {UPLOAD_DELAY} 秒后重试...")
+                logging.info(f"等待 {UPLOAD_DELAY} 秒后重试...")
                 time.sleep(UPLOAD_DELAY)
             else:
-                log(f"达到最大重试次数 ({MAX_RETRIES})，上传失败。")
+                logging.error(f"达到最大重试次数 ({MAX_RETRIES})，上传失败。")
                 break # 跳出重试循环
     if not response:
-        log("上传失败：达到最大重试次数或未收到响应")
+        logging.error("上传失败：达到最大重试次数或未收到响应")
         return None
 
     video_id = response.get("id")
     if not video_id:
-        log("上传失败：未获取到视频ID")
+        logging.error("上传失败：未获取到视频ID")
         return None
     
-    log(f"上传完成，视频ID: {video_id}")
+    logging.info(f"上传完成，视频ID: {video_id}")
 
     # 添加到播放列表
     if playlist_id:
@@ -570,15 +622,13 @@ def handle_merged_video(mp4_path: Path) -> bool:
         是否成功处理（True=成功，False=配额用尽或失败）
     """
 
-    # ========== 每次处理前重新加载members.json ==========
-    MEMBERS = load_members_config()
-    if VERBOSE_LOGGING:
-        log(f"已重新加载成员配置，共 {len(MEMBERS)} 个成员")
+    # ========== 每次处理前重新加载members ==========
+
+    logging.debug(f"已重新加载成员配置，共 {len(ENABLED_MEMBERS)} 个成员")
     # ============================================================
 
     if is_uploaded(mp4_path):
-        if VERBOSE_LOGGING:
-            log(f"{mp4_path.name} 已上传，跳过")
+        logging.debug(f"{mp4_path.name} 已上传，跳过")
         return True
     
     video_id = None
@@ -587,16 +637,15 @@ def handle_merged_video(mp4_path: Path) -> bool:
         video_id = upload_video(str(mp4_path))
     except HttpError as e:
         if e.resp.status == 403 and 'quotaExceeded' in str(e):
-            global LAST_QUOTA_EXHAUSTED_DATE
-            LAST_QUOTA_EXHAUSTED_DATE = get_today_utc_date_str()
-            log("检测到上传配额用尽，暂停上传，等待配额重置后继续。")
+            # 这里不需要再设置LAST_QUOTA_EXHAUSTED_DATE，因为upload_video已经设置了
+            logging.warning("检测到上传配额用尽，暂停上传，等待配额重置后继续。")
             return False
         else:
-            log(f"上传时发生HTTP错误: {e}")
+            logging.error(f"上传时发生HTTP错误: {e}")
             send_upload_notification(mp4_path.name, "", False)
             return False
     except Exception as e:
-        log(f"上传时发生未知错误: {e}")
+        logging.error(f"上传时发生未知错误: {e}")
         send_upload_notification(mp4_path.name, "", False)
         return False
 
@@ -607,7 +656,7 @@ def handle_merged_video(mp4_path: Path) -> bool:
 
         # 检测成员配置
         member_config = None
-        for member in MEMBERS:
+        for member in ENABLED_MEMBERS:
             en_name = member.get('name_en', '')
             jp_name = member.get('name_jp', '')
             if (en_name and en_name in mp4_path.stem) or \
@@ -628,7 +677,7 @@ def handle_merged_video(mp4_path: Path) -> bool:
             tags = YOUTUBE_DEFAULT_TAGS.copy()
 
         mark_as_uploaded(mp4_path, video_id)
-        log(f"{mp4_path.name} 上传成功并已标记")
+        logging.debug(f"{mp4_path.name} 上传成功并已标记")
         
         # 发送成功通知
         send_upload_notification(mp4_path.name, video_id, True)
@@ -641,7 +690,7 @@ def handle_merged_video(mp4_path: Path) -> bool:
         
         return True
     else:
-        log(f"{mp4_path.name} 上传失败")
+        logging.error(f"{mp4_path.name} 上传失败")
         send_upload_notification(mp4_path.name, "", False)
         return False
 
@@ -653,8 +702,7 @@ def upload_all_pending_videos(directory: Path = None):
         directory: 包含MP4文件的目录（None时使用配置的OUTPUT_DIR）
     """
     if not ENABLE_AUTO_UPLOAD:
-        if DEBUG_MODE:
-            log("自动上传功能已禁用")
+        logging.debug("自动上传功能已禁用")
         return
     
     if directory is None:
@@ -667,8 +715,7 @@ def upload_all_pending_videos(directory: Path = None):
     
     with FileLock(upload_lock_file, UPLOAD_LOCK_TIMEOUT) as lock:
         if lock is None:
-            if VERBOSE_LOGGING:
-                log("其他进程正在上传，跳过本次上传")
+            logging.debug("其他进程正在上传，跳过本次上传")
             return
         
         _upload_all_pending_videos_internal(directory)
@@ -680,44 +727,67 @@ def _upload_all_pending_videos_internal(directory: Path):
     - 严重错误(配额耗尽):立即停止所有上传
     """
     global LAST_QUOTA_EXHAUSTED_DATE
+    any_video_uploaded = False
     
+    def trigger_publish():
+        if any_video_uploaded:
+            logging.info("检测到新上传，正在统一同步至 GitHub Pages...")
+            try:
+                publish_to_github_pages()
+                logging.debug("GitHub Pages 同步完成")
+            except Exception as e:
+                logging.error(f"GitHub Pages 同步失败: {e}")
+
     if not directory.exists():
-        log(f"目录不存在: {directory}")
+        logging.warning(f"目录不存在: {directory}")
         return
 
-    log("=" * 60)
-    log("开始扫描待上传视频...")
-    log("=" * 60)
+    logging.info("=" * 50)
+    logging.info("开始扫描待上传视频...")
+    logging.info("=" * 50)
 
     while True:
-        today_str = get_today_utc_date_str()
+        today_str = get_today_pacific_date_str()
         
         # ========== 1. 检查配额状态 ==========
-        if YOUTUBE_ENABLE_QUOTA_MANAGEMENT and LAST_QUOTA_EXHAUSTED_DATE == today_str:
-            log("⚠️  检测到配额已耗尽,停止上传")
-            log(f"📅 下次重试时间: {get_next_retry_time_japan()}")
-            return
+        if YOUTUBE_ENABLE_QUOTA_MANAGEMENT:
+            # 检查是否所有账号都配额耗尽
+            all_exhausted = all(
+                date == today_str 
+                for date in LAST_QUOTA_EXHAUSTED_DATE.values() 
+                if date is not None
+            )
+            any_exhausted = any(
+                date == today_str 
+                for date in LAST_QUOTA_EXHAUSTED_DATE.values()
+            )
+
+            if all_exhausted and any_exhausted:  # 确保至少有一个账号耗尽
+                logging.warning("⚠️  所有账号配额已耗尽,停止上传")
+                logging.warning(f"📅 下次重试时间: {get_next_retry_time_japan()}")
+                return
 
         # ========== 2. 扫描待上传文件 ==========
         mp4_files = sorted(directory.glob("*.mp4"))
         pending_files = [f for f in mp4_files if not is_uploaded(f)]
 
         if not pending_files:
-            log("✅ 扫描完成:没有待上传的视频")
+            logging.info("✅ 扫描完成:没有待上传的视频")
             break
 
-        log(f"📦 找到 {len(pending_files)} 个待上传视频")
-        log("-" * 60)
+        logging.info(f"📦 找到 {len(pending_files)} 个待上传视频")
+        logging.info("-" * 50)
 
         # ========== 3. 逐个处理视频 ==========
         for idx, mp4_file in enumerate(pending_files, 1):
-            log(f"[{idx}/{len(pending_files)}] 正在处理: {mp4_file.name}")
+            logging.debug(f"[{idx}/{len(pending_files)}] 正在处理: {mp4_file.name}")
             
             try:
                 success = handle_merged_video(mp4_file)
                 
                 if success:
-                    log(f"✅ {mp4_file.name} 上传成功")
+                    any_video_uploaded = True
+                    logging.info(f"✅ {mp4_file.name} 上传成功")
                     time.sleep(10)  # 视频间间隔
                     
                 else:
@@ -725,42 +795,55 @@ def _upload_all_pending_videos_internal(directory: Path):
                     # 1. 配额耗尽 (已设置 LAST_QUOTA_EXHAUSTED_DATE)
                     # 2. 普通上传失败
                     
-                    # 检查是否是配额问题
-                    if YOUTUBE_ENABLE_QUOTA_MANAGEMENT and LAST_QUOTA_EXHAUSTED_DATE == today_str:
-                        log("🛑 检测到配额耗尽,停止后续上传")
-                        return  # 严重错误:立即退出
+                    # 检查是否所有账号配额都耗尽
+                    if YOUTUBE_ENABLE_QUOTA_MANAGEMENT:
+                        all_exhausted = all(
+                            date == today_str 
+                            for date in LAST_QUOTA_EXHAUSTED_DATE.values() 
+                            if date is not None
+                        )
+                        any_exhausted = any(
+                            date == today_str 
+                            for date in LAST_QUOTA_EXHAUSTED_DATE.values()
+                        )
+
+                        if all_exhausted and any_exhausted:
+                            logging.error("🛑 所有账号配额已耗尽,停止后续上传")
+                            trigger_publish()
+                            return  # 严重错误:立即退出
                     
                     # 普通失败:跳过并继续
-                    log(f"⚠️  {mp4_file.name} 上传失败,跳过并继续下一个")
+                    logging.warning(f"⚠️  {mp4_file.name} 上传失败,跳过并继续下一个")
                     continue
 
             except HttpError as e:
                 # HttpError 应该在 handle_merged_video 中被捕获
-                # 如果到这里说明有漏网之鱼
-                if e.resp.status == 403 and 'quotaExceeded' in str(e):
-                    LAST_QUOTA_EXHAUSTED_DATE = get_today_utc_date_str()
-                    log("🛑 检测到配额耗尽(顶层捕获),停止上传")
-                    return  # 严重错误:立即退出
-                else:
-                    log(f"❌ {mp4_file.name} 发生HTTP错误: {e}")
-                    send_upload_notification(mp4_file.name, "", False)
-                    continue  # 一般错误:跳过并继续
+                # 如果到这里说明有漏网之鱼，记录错误并继续
+                error_str = str(e)
+                if 'quotaExceeded' in error_str or 'uploadLimitExceeded' in error_str:
+                    # 这里无法确定账号ID，只能记录警告
+                    logging.warning(f"🛑 检测到配额相关错误(顶层捕获): {e}")
+                    logging.warning("注意：此错误应该在upload_video中被捕获，请检查代码")
+                logging.error(f"❌ {mp4_file.name} 发生HTTP错误: {e}")
+                send_upload_notification(mp4_file.name, "", False)
+                continue  # 一般错误:跳过并继续
 
             except Exception as e:
                 # 捕获所有其他异常,防止整个进程崩溃
-                log(f"❌ {mp4_file.name} 发生未知错误: {e}")
-                import traceback
-                log(f"详细堆栈:\n{traceback.format_exc()}")
+                logging.error(f"❌ {mp4_file.name} 发生未知错误: {e}")
+                logging.error(f"详细堆栈:\n{traceback.format_exc()}")
                 continue  # 一般错误:跳过并继续
 
         # ========== 4. 本轮处理完毕,重新扫描 ==========
-        log("-" * 60)
-        log("本轮处理完毕,重新扫描以检测新生成的视频...")
-        log("")
+        logging.info("-" * 50)
+        logging.info("本轮处理完毕,重新扫描以检测新生成的视频...")
+        logging.info("")
+        
+    trigger_publish()
 
-    log("=" * 60)
-    log("所有视频处理完毕")
-    log("=" * 60)
+    logging.info("=" * 50)
+    logging.info("所有视频处理完毕")
+    logging.info("=" * 50)
 
 def save_upload_info(file_path: Path, video_id: str, title: str, description: str, tags: list, upload_time: str):
     """保存上传信息到JSON文件"""
@@ -797,11 +880,9 @@ def save_upload_info(file_path: Path, video_id: str, title: str, description: st
     try:
         with open(upload_info_file, 'w', encoding='utf-8') as f:
             json.dump(upload_data, f, ensure_ascii=False, indent=2)
-        if VERBOSE_LOGGING:
-            log(f"上传信息已保存到: {upload_info_file}")
-            publish_to_github_pages()
+            logging.debug(f"上传信息已保存到: {upload_info_file}")
     except Exception as e:
-        log(f"保存上传信息失败: {e}")
+        logging.error(f"保存上传信息失败: {e}")
 
 def main():
     """主函数，用于测试"""

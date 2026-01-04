@@ -1,70 +1,55 @@
+#!/usr/bin/env python3
+"""
+Showroom 录制状态监控服务
+监控直播状态并在检测到录制异常时自动重启服务
+"""
+
 import os
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent / "shared"))
+
+# ============================================================
+# 初始化日志系统 (必须在导入config之前)
+# ============================================================
+# 添加父目录到路径,确保能找到模块
+_script_dir = Path(__file__).resolve().parent
+_project_root = _script_dir.parent
+sys.path.insert(0, str(_project_root))
+
+# 配置日志系统
+from logger_config import setup_logger
+setup_logger()
+
+# ============================================================
+# 导入依赖
+# ============================================================
 import time
 import logging
-import sys
 import cx_Oracle
-from pathlib import Path
-from datetime import datetime, timedelta 
-from logger_config import setup_logger
-from config import (
-    ENABLED_MEMBERS, 
-    RESTART_CHECK_INTERVAL, 
-    MIN_RESTART_INTERVAL,
-    TS_PARENT_DIR,
-    LOG_DIR, 
-    GRACEFUL_START_DELAY,
-    WALLET_DIR,
-    DB_USER,
-    DB_PASSWORD,
-    DB_TABLE,
-    TNS_ALIAS
-)
-# **全局变量**
-# ✅ 修改配置常量：TS文件多久没有更新视为录制停止，改为 60 秒
-MAX_TS_INACTIVE_TIME = 60 # 60 秒
-GLOBAL_CONN = None 
+from datetime import datetime, timedelta
+from config import *
+
+# ============================================================
+# 全局变量
+# ============================================================
 os.environ["TNS_ADMIN"] = WALLET_DIR
+GLOBAL_CONN = None
 
-setup_logger(LOG_DIR, "restart_handler")
+MEMBER_ID = os.environ.get('MEMBER_ID', 'hashimoto_haruna')
+MEMBER = next((m for m in ENABLED_MEMBERS if m['id'] == MEMBER_ID), None)
 
-"""获取Oracle数据库连接"""
-def connect_db():
-    """尝试建立或重新建立 Oracle 数据库连接。"""
-    global GLOBAL_CONN
-    
-    # 如果已存在连接，先尝试关闭它
-    if GLOBAL_CONN:
-        try:
-            GLOBAL_CONN.close()
-            logging.info("旧的数据库连接已关闭。尝试重连...")
-        except Exception:
-            pass 
-
-    try:
-        GLOBAL_CONN = cx_Oracle.connect(user=DB_USER, password=DB_PASSWORD, dsn=TNS_ALIAS)
-        logging.info("Oracle数据库持久连接成功建立/重新连接成功。")
-        return True
-    except Exception as e:
-        # 这里只记录错误，但不退出
-        logging.error(f"Oracle数据库连接失败: {e}")
-        GLOBAL_CONN = None 
-        return False
-
-# 首次尝试连接
-if not connect_db():
-    logging.critical("首次数据库连接失败，脚本退出。")
+if not MEMBER:
+    print(f"错误: 找不到成员 ID: {MEMBER_ID}")
     sys.exit(1)
 
-MEMBER_ID = os.getenv("MEMBER_ID")
-
-if MEMBER_ID:
-    MEMBER = next((m for m in ENABLED_MEMBERS if m["id"] == MEMBER_ID), None)
-    if not MEMBER:
-        print(f"错误: 找不到成员 ID: {MEMBER_ID}")
-        sys.exit(1)
+GLOBAL_CONN = get_db_connection()
+if not GLOBAL_CONN:
+    logging.critical("首次数据库连接失败,脚本退出。")
+    sys.exit(1)
 else:
-    MEMBER = ENABLED_MEMBERS[0]
-    print(f"未指定 MEMBER_ID，使用默认成员: {MEMBER['id']}")
+    logging.info("数据库连接成功建立。")
 
 SERVICE_NAME = f"showroom-{MEMBER['id']}.service"
 
@@ -76,6 +61,8 @@ def read_live_status():
     使用全局持久连接 GLOBAL_CONN，因此查询后不关闭连接。
     """
     # 直接使用全局连接
+    global GLOBAL_CONN
+
     conn = GLOBAL_CONN
     
     try:
@@ -120,7 +107,8 @@ def read_live_status():
 
             # 尝试重连
             logging.warning("尝试重新建立数据库连接...")
-            if connect_db():
+            GLOBAL_CONN = get_db_connection()
+            if GLOBAL_CONN:
                 # 重连成功，虽然本次读取失败，但下次循环应能恢复
                 logging.info("数据库连接已恢复。")
             else:
@@ -238,7 +226,7 @@ def has_new_ts_files(started_at_unix: int) -> bool:
     time_since_last_write = current_time - latest_mtime
     
     if time_since_last_write < MAX_TS_INACTIVE_TIME:
-        logging.info(f"录制正常: 最新 .ts 文件 {latest_ts.name}，更新时间: {time.ctime(latest_mtime)}，间隔 {time_since_last_write:.0f} 秒")
+        logging.debug(f"录制正常: 最新 .ts 文件 {latest_ts.name}，更新时间: {time.ctime(latest_mtime)}，间隔 {time_since_last_write:.0f} 秒")
         return True
     else:
         logging.warning(f"录制停止: 最近的 .ts 文件 {latest_ts.name} (更新于 {time.ctime(latest_mtime)}) 太久，已 {time_since_last_write:.0f} 秒未更新，超过 {MAX_TS_INACTIVE_TIME} 秒")
@@ -253,7 +241,7 @@ def restart_service(service_name):
     
     if time_since_last < MIN_RESTART_INTERVAL:
         wait_time = MIN_RESTART_INTERVAL - time_since_last
-        logging.info(f"距离上次重启仅 {time_since_last:.0f} 秒，等待 {wait_time:.0f} 秒后再重启")
+        logging.debug(f"距离上次重启仅 {time_since_last:.0f} 秒，等待 {wait_time:.0f} 秒后再重启")
         return False
     
     logging.warning(f"执行重启服务: {service_name}")
@@ -285,7 +273,7 @@ def restart_loop():
                 continue
             
             # 开播时间已足够,开始正常检查
-            logging.info(f"{MEMBER['id']} 正在直播中 (已开播 {time_since_start:.1f} 秒),检查录制状态...")
+            logging.debug(f"{MEMBER['id']} 正在直播中 (已开播 {time_since_start:.1f} 秒),检查录制状态...")
             
             if not has_new_ts_files(started_at):
                 logging.warning("直播中但未检测到新 ts 文件或录制停止")

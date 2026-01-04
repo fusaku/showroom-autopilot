@@ -1,0 +1,1409 @@
+members:
+- id: ikuno_rina
+  room_id: '416416'
+  name_jp: 生野 莉奈
+  name_en: Ikuno Rina
+  team: HKT48 Team H
+  enabled: true
+  room_url_key: 48_RINA_IKUNO
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      生野 莉奈
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamH #生野莉奈 #Showroom
+    tags:
+    - HKT48
+    - TeamH
+    - 生野莉奈
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: ishibashi_ibuki
+  room_id: '197343'
+  name_jp: 石橋 颯
+  name_en: Ishibashi Ibuki
+  team: HKT48 Team H
+  enabled: true
+  room_url_key: 48_IBUKI_ISHIBASHI
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      石橋 颯
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamH #石橋颯 #Showroom
+    tags:
+    - HKT48
+    - TeamH
+    - 石橋颯
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: ichimura_airi
+  room_id: '198497'
+  name_jp: 市村 愛里
+  name_en: Ichimura Airi
+  team: HKT48 Team H
+  enabled: true
+  room_url_key: 48_AIRI_ICHIMURA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      市村 愛里
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamH #市村愛里 #Showroom
+    tags:
+    - HKT48
+    - TeamH
+    - 市村愛里
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: kitagawa_hiiro
+  room_id: '416624'
+  name_jp: 北川陽彩
+  name_en: Kitagawa Hiiro
+  team: HKT48 Team H
+  enabled: true
+  room_url_key: 48_HIIRO_KITAGAWA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      北川陽彩
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamH #北川陽彩 #Showroom
+    tags:
+    - HKT48
+    - TeamH
+    - 北川陽彩
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: kurihara_sae
+  room_id: '61801'
+  name_jp: 栗原 紗英
+  name_en: Kurihara Sae
+  team: HKT48 Team H
+  enabled: true
+  room_url_key: 48_SAE_KURIHARA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      栗原 紗英
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamH #栗原紗英 #Showroom
+    tags:
+    - HKT48
+    - TeamH
+    - 栗原紗英
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: sakamoto_rino
+  room_id: '197347'
+  name_jp: 坂本 りの
+  name_en: Sakamoto Rino
+  team: HKT48 Team H
+  enabled: true
+  room_url_key: 48_RINO_SAKAMOTO
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      坂本 りの
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamH #坂本りの #Showroom
+    tags:
+    - HKT48
+    - TeamH
+    - 坂本りの
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: shibui_mina
+  room_id: '416639'
+  name_jp: 渋井 美奈
+  name_en: Shibui Mina
+  team: HKT48 Team H
+  enabled: true
+  room_url_key: 48_MINA_SHIBUI
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      渋井 美奈
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamH #渋井美奈 #Showroom
+    tags:
+    - HKT48
+    - TeamH
+    - 渋井美奈
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: toyonaga_aki
+  room_id: '79301'
+  name_jp: 豊永 阿紀
+  name_en: Toyonaga Aki
+  team: HKT48 Team H
+  enabled: true
+  room_url_key: 48_AKI_TOYONAGA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      豊永 阿紀
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamH #豊永阿紀 #Showroom
+    tags:
+    - HKT48
+    - TeamH
+    - 豊永阿紀
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: fuchigami_mai
+  room_id: '61793'
+  name_jp: 渕上 舞
+  name_en: Fuchigami Mai
+  team: HKT48 Team H
+  enabled: true
+  room_url_key: 48_MAI_FUCHIGAMI
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      渕上 舞
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamH #渕上舞 #Showroom
+    tags:
+    - HKT48
+    - TeamH
+    - 渕上舞
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: yamauchi_yuna
+  room_id: '61705'
+  name_jp: 山内 祐奈
+  name_en: Yamauchi Yuna
+  team: HKT48 Team H
+  enabled: true
+  room_url_key: 48_YUNA_YAMAUCHI
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      山内 祐奈
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamH #山内祐奈 #Showroom
+    tags:
+    - HKT48
+    - TeamH
+    - 山内祐奈
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: ishimatsu_yuina
+  room_id: '416489'
+  name_jp: 石松 結菜
+  name_en: Ishimatsu Yuina
+  team: HKT48 Team H
+  enabled: true
+  room_url_key: 48_YUINA_ISHIMATSU
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      石松 結菜
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamH #石松結菜 #Showroom
+    tags:
+    - HKT48
+    - TeamH
+    - 石松結菜
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: fujino_kokoha
+  room_id: '416658'
+  name_jp: 藤野 心葉
+  name_en: Fujino Kokoha
+  team: HKT48 Team H
+  enabled: true
+  room_url_key: 48_KOKOHA_FUJINO
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      藤野 心葉
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamH #藤野心葉 #Showroom
+    tags:
+    - HKT48
+    - TeamH
+    - 藤野心葉
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: yanase_reia
+  room_id: '416718'
+  name_jp: 梁瀬 鈴雅
+  name_en: Yanase Reia
+  team: HKT48 Team H
+  enabled: true
+  room_url_key: 48_REIA_YANASE
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      梁瀬 鈴雅
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamH #梁瀬鈴雅 #Showroom
+    tags:
+    - HKT48
+    - TeamH
+    - 梁瀬鈴雅
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: akiyoshi_yuka
+  room_id: '61765'
+  name_jp: 秋吉優花
+  name_en: Akiyoshi Yuka
+  team: HKT48 Team KIV
+  enabled: true
+  room_url_key: 48_YUKA_AKIYOSHI
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      秋吉優花
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamKIV #秋吉優花 #Showroom
+    tags:
+    - HKT48
+    - TeamKIV
+    - 秋吉優花
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: imamura_maria
+  room_id: '61800'
+  name_jp: 今村 麻莉愛
+  name_en: Imamura Maria
+  team: HKT48 Team KIV
+  enabled: true
+  room_url_key: 48_MARIA_IMAMURA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      今村 麻莉愛
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamKIV #今村麻莉愛 #Showroom
+    tags:
+    - HKT48
+    - TeamKIV
+    - 今村麻莉愛
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: oba_risaki
+  room_id: '416498'
+  name_jp: 大庭 凜咲
+  name_en: Oba Risaki
+  team: HKT48 Team KIV
+  enabled: true
+  room_url_key: 48_RISAKI_OBA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      大庭 凜咲
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamKIV #大庭凜咲 #Showroom
+    tags:
+    - HKT48
+    - TeamKIV
+    - 大庭凜咲
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: kuriyama_rina
+  room_id: '198483'
+  name_jp: 栗山 梨奈
+  name_en: Kuriyama Rina
+  team: HKT48 Team KIV
+  enabled: true
+  room_url_key: 48_RINA_KURIYAMA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      栗山 梨奈
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamKIV #栗山梨奈 #Showroom
+    tags:
+    - HKT48
+    - TeamKIV
+    - 栗山梨奈
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: sakamoto_erena
+  room_id: '61802'
+  name_jp: 坂本 愛玲菜
+  name_en: Sakamoto Erena
+  team: HKT48 Team KIV
+  enabled: true
+  room_url_key: 48_ERENA_SAKAMOTO
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      坂本 愛玲菜
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamKIV #坂本愛玲菜 #Showroom
+    tags:
+    - HKT48
+    - TeamKIV
+    - 坂本愛玲菜
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: takemoto_kurumi
+  room_id: '198479'
+  name_jp: 竹本 くるみ
+  name_en: Takemoto Kurumi
+  team: HKT48 Team KIV
+  enabled: true
+  room_url_key: 48_KURUMI_TAKEMOTO
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      竹本 くるみ
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamKIV #竹本くるみ #Showroom
+    tags:
+    - HKT48
+    - TeamKIV
+    - 竹本くるみ
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: tachibana_kokoro
+  room_id: '416653'
+  name_jp: 立花 心良
+  name_en: Tachibana Kokoro
+  team: HKT48 Team KIV
+  enabled: true
+  room_url_key: 48_KOKORO_TACHIBANA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      立花 心良
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamKIV #立花心良 #Showroom
+    tags:
+    - HKT48
+    - TeamKIV
+    - 立花心良
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: tanaka_iori
+  room_id: '198477'
+  name_jp: 田中 伊桜莉
+  name_en: Tanaka Iori
+  team: HKT48 Team KIV
+  enabled: true
+  room_url_key: 48_IORI_TANAKA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      田中 伊桜莉
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamKIV #田中伊桜莉 #Showroom
+    tags:
+    - HKT48
+    - TeamKIV
+    - 田中伊桜莉
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: jitoe_nene
+  room_id: '79299'
+  name_jp: 地頭江 音々
+  name_en: Jitoe Nene
+  team: HKT48 Team KIV
+  enabled: true
+  room_url_key: 48_NENE_JITOE
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      地頭江 音々
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamKIV #地頭江音々 #Showroom
+    tags:
+    - HKT48
+    - TeamKIV
+    - 地頭江音々
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: fukui_karen
+  room_id: '416657'
+  name_jp: 福井 可憐
+  name_en: Fukui Karen
+  team: HKT48 Team KIV
+  enabled: true
+  room_url_key: 48_KAREN_FUKUI
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      福井 可憐
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamKIV #福井可憐 #Showroom
+    tags:
+    - HKT48
+    - TeamKIV
+    - 福井可憐
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: morisaki_saaya
+  room_id: '416696'
+  name_jp: 森崎 冴彩
+  name_en: Morisaki Saaya
+  team: HKT48 Team KIV
+  enabled: true
+  room_url_key: 48_SAAYA_MORISAKI
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      森崎 冴彩
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamKIV #森崎冴彩 #Showroom
+    tags:
+    - HKT48
+    - TeamKIV
+    - 森崎冴彩
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: izawa_miyu
+  room_id: '416466'
+  name_jp: 井澤 美優
+  name_en: Izawa Miyu
+  team: HKT48 Team KIV
+  enabled: true
+  room_url_key: 48_MIYU_IZAWA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      井澤 美優
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamKIV #井澤美優 #Showroom
+    tags:
+    - HKT48
+    - TeamKIV
+    - 井澤美優
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: ihara_hanna
+  room_id: '416490'
+  name_jp: 猪原 絆愛
+  name_en: Ihara Hanna
+  team: HKT48 Team KIV
+  enabled: true
+  room_url_key: 48_HANNA_IHARA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      猪原 絆愛
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamKIV #猪原絆愛 #Showroom
+    tags:
+    - HKT48
+    - TeamKIV
+    - 猪原絆愛
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: eguchi_kokoha
+  room_id: '416491'
+  name_jp: 江口 心々華
+  name_en: Eguchi Kokoha
+  team: HKT48 Team KIV
+  enabled: true
+  room_url_key: 48_KOKOHA_EGUCHI
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      江口 心々華
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamKIV #江口心々華 #Showroom
+    tags:
+    - HKT48
+    - TeamKIV
+    - 江口心々華
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: ouchi_rinka
+  room_id: '416494'
+  name_jp: 大内 梨果
+  name_en: Ouchi Rinka
+  team: HKT48 Team KIV
+  enabled: true
+  room_url_key: 48_RINKA_OUCHI
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      大内 梨果
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamKIV #大内梨果 #Showroom
+    tags:
+    - HKT48
+    - TeamKIV
+    - 大内梨果
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: yasui_hina
+  room_id: '416716'
+  name_jp: 安井 妃奈
+  name_en: Yasui Hina
+  team: HKT48 Team KIV
+  enabled: true
+  room_url_key: 48_HINA_YASUI
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      安井 妃奈
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #TeamKIV #安井妃奈 #Showroom
+    tags:
+    - HKT48
+    - TeamKIV
+    - 安井妃奈
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: matsumoto_urara
+  room_id: '416659'
+  name_jp: 松本 羽麗
+  name_en: Matsumoto Urara
+  team: HKT48 研究生
+  enabled: true
+  room_url_key: 48_URARA_MATSUMOTO
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      松本 羽麗
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #研究生 #松本羽麗 #Showroom
+    tags:
+    - HKT48
+    - 研究生
+    - 松本羽麗
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: aoki_hinako
+  room_id: '538330'
+  name_jp: 青木 日菜子
+  name_en: Aoki Hinako
+  team: HKT48 研究生
+  enabled: true
+  room_url_key: 48_HINAKO_AOKI
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      青木 日菜子
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #研究生 #青木日菜子 #Showroom
+    tags:
+    - HKT48
+    - 研究生
+    - 青木日菜子
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: ishii_ayane
+  room_id: '538352'
+  name_jp: 石井 彩音
+  name_en: Ishii Ayane
+  team: HKT48 研究生
+  enabled: true
+  room_url_key: 48_AYANE_ISHII
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      石井 彩音
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #研究生 #石井彩音 #Showroom
+    tags:
+    - HKT48
+    - 研究生
+    - 石井彩音
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: ishikawa_amiyu
+  room_id: '538333'
+  name_jp: 石川 歩実優
+  name_en: Ishikawa Amiyu
+  team: HKT48 研究生
+  enabled: true
+  room_url_key: 48_AMIYU_ISHIKAWA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      石川 歩実優
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #研究生 #石川歩実優 #Showroom
+    tags:
+    - HKT48
+    - 研究生
+    - 石川歩実優
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: ijima_riria
+  room_id: '538335'
+  name_jp: 猪島 莉玲亜
+  name_en: Ijima Riria
+  team: HKT48 研究生
+  enabled: true
+  room_url_key: 48_RIRIA_IJIMA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      猪島 莉玲亜
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #研究生 #猪島莉玲亜 #Showroom
+    tags:
+    - HKT48
+    - 研究生
+    - 猪島莉玲亜
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: eura_yuka
+  room_id: '538336'
+  name_jp: 江浦 優香
+  name_en: Eura Yuka
+  team: HKT48 研究生
+  enabled: true
+  room_url_key: 48_YUKA_EURA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      江浦 優香
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #研究生 #江浦優香 #Showroom
+    tags:
+    - HKT48
+    - 研究生
+    - 江浦優香
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: kure_yuna
+  room_id: '538339'
+  name_jp: 呉 優菜
+  name_en: Kure Yuna
+  team: HKT48 研究生
+  enabled: true
+  room_url_key: 48_YUNA_KURE
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      呉 優菜
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #研究生 #呉優菜 #Showroom
+    tags:
+    - HKT48
+    - 研究生
+    - 呉優菜
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: tsurukawa_nachi
+  room_id: '538341'
+  name_jp: 靏川 那智
+  name_en: Tsurukawa Nachi
+  team: HKT48 研究生
+  enabled: true
+  room_url_key: 48_NACHI_TSURUKAWA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      靏川 那智
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #研究生 #靏川那智 #Showroom
+    tags:
+    - HKT48
+    - 研究生
+    - 靏川那智
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: nakano_minami
+  room_id: '538343'
+  name_jp: 中野 南実
+  name_en: Nakano Minami
+  team: HKT48 研究生
+  enabled: true
+  room_url_key: 48_MINAMI_NAKANO
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      中野 南実
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #研究生 #中野南実 #Showroom
+    tags:
+    - HKT48
+    - 研究生
+    - 中野南実
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: nagano_rara
+  room_id: '538344'
+  name_jp: 長野 らら
+  name_en: Nagano Rara
+  team: HKT48 研究生
+  enabled: true
+  room_url_key: 48_RARA_NAGANO
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      長野 らら
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #研究生 #長野らら #Showroom
+    tags:
+    - HKT48
+    - 研究生
+    - 長野らら
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: matsunaga_yui
+  room_id: '538345'
+  name_jp: 松永 悠良
+  name_en: Matsunaga Yui
+  team: HKT48 研究生
+  enabled: true
+  room_url_key: 48_YUI_MATSUNAGA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      松永 悠良
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #研究生 #松永悠良 #Showroom
+    tags:
+    - HKT48
+    - 研究生
+    - 松永悠良
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: matsumoto_moka
+  room_id: '538346'
+  name_jp: 松本 苺花
+  name_en: Matsumoto Moka
+  team: HKT48 研究生
+  enabled: true
+  room_url_key: 48_MOKA_MATSUMOTO
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      松本 苺花
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #研究生 #松本苺花 #Showroom
+    tags:
+    - HKT48
+    - 研究生
+    - 松本苺花
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: yamakawa_maria
+  room_id: '538348'
+  name_jp: 山川 万里愛
+  name_en: Yamakawa Maria
+  team: HKT48 研究生
+  enabled: true
+  room_url_key: 48_MARIA_YAMAKAWA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      山川 万里愛
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #研究生 #山川万里愛 #Showroom
+    tags:
+    - HKT48
+    - 研究生
+    - 山川万里愛
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: yoshida_mei
+  room_id: '538349'
+  name_jp: 吉田 めい
+  name_en: Yoshida Mei
+  team: HKT48 研究生
+  enabled: true
+  room_url_key: 48_MEI_YOSHIDA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      吉田 めい
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #研究生 #吉田めい #Showroom
+    tags:
+    - HKT48
+    - 研究生
+    - 吉田めい
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true
+- id: ryuto_ayane
+  room_id: '538350'
+  name_jp: 龍頭 綺音
+  name_en: Ryuto Ayane
+  team: HKT48 研究生
+  enabled: true
+  room_url_key: 48_AYANE_RYUTO
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      龍頭 綺音
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #HKT48 #研究生 #龍頭綺音 #Showroom
+    tags:
+    - HKT48
+    - 研究生
+    - 龍頭綺音
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2eWF3gj7VQzGk1cSKHAMRIb
+    use_primary_account: true

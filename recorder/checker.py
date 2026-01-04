@@ -3,9 +3,17 @@ import subprocess
 import cx_Oracle
 import os
 import threading
+import traceback
+import logging
+import re
+import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent / "shared"))
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from logger_config import setup_logger
+setup_logger()
 from config import *
 from merger import merge_once
 from datetime import datetime
@@ -123,12 +131,10 @@ def group_folders_by_member(folders):
                     # 正常情况下ts文件每2秒一个,5分钟已经很宽松了
                     if time_gap < 300:
                         current_group.append(folder)
-                        if DEBUG_MODE:
-                            log(f"文件夹 {folder.name} 与前一个文件夹ts时间差 {time_gap:.0f}秒,判定为同一场直播")
+                        logging.debug(f"文件夹 {folder.name} 与前一个文件夹ts时间差 {time_gap:.0f}秒,判定为同一场直播")
                     else:
                         # 时间差太大,说明是新的直播
-                        if DEBUG_MODE:
-                            log(f"文件夹 {folder.name} 与前一个文件夹ts时间差 {time_gap:.0f}秒,判定为新直播")
+                        logging.info(f"文件夹 {folder.name} 与前一个文件夹ts时间差 {time_gap:.0f}秒,判定为新直播")
                         
                         # 保存当前组
                         first_folder = current_group[0]
@@ -207,93 +213,66 @@ def is_really_stream_ended(all_folders, grace_period=FINAL_INACTIVE_THRESHOLD):
         
         # 如果任何文件夹的文件在宽限期内还有更新，说明可能还在录制
         if seconds_since_last_update <= grace_period:
-            if DEBUG_MODE:
-                log(f"文件夹 {ts_dir.name} 在 {seconds_since_last_update:.0f} 秒前还有文件更新，可能还在录制中")
+            logging.debug(f"文件夹 {ts_dir.name} 在 {seconds_since_last_update:.0f} 秒前还有文件更新，可能还在录制中")
             return False
     
     return True
 
 def has_matching_subtitle_file(ts_dir: Path):
-    """检查指定文件夹是否有对应的字幕文件，支持基于时间戳最接近原则的自动匹配"""
-    if not ts_dir:
-        return False
-    
+    """
+    改进版：检查是否有匹配的字幕文件
+    支持：成员名带空格、日文无空格、时间戳允许±2分钟误差
+    """
     folder_name = ts_dir.name
     
-    try:
-        # 1. 解析日期和基础路径
-        date_part = folder_name[:6]
-        year, month, day = f"20{date_part[:2]}", date_part[2:4], date_part[4:6]
-        date_folder = f"{year}-{month}-{day}"
-        subtitle_dir = SUBTITLE_ROOT / date_folder / SUBTITLE_SUBPATH
-        exact_subtitle = subtitle_dir / f"{folder_name}.ass"
-        
-        # 2. 首先检查精确匹配
-        if exact_subtitle.exists():
-            return True
-        
-        # 3. 提取视频文件夹的时间戳 (假设格式末尾是 6 位数字)
-        video_ts_str = folder_name.split()[-1]
-        if not (video_ts_str.isdigit() and len(video_ts_str) == 6):
-            video_ts_val = None
-        else:
-            video_ts_val = int(video_ts_str)
+    # 1. 使用正则精准拆分文件夹名
+    # 格式假设：YYMMDD Showroom - 名字 123456
+    # (\d{6}) -> 日期
+    # Showroom\s+-\s+ -> 固定前缀
+    # (.+?) -> 名字（贪婪匹配，直到遇到最后那个数字前的空格）
+    # \s+(\d{6})$ -> 结尾的时间戳数字
+    pattern = r'^(\d{6})\s+Showroom\s+-\s+(.+?)\s+(\d{6})$'
+    match = re.match(pattern, folder_name)
+    
+    if not match:
+        logging.warning(f"文件夹格式不标准，无法解析: {folder_name}")
+        return False
 
-        # 4. 提取人名进行模糊匹配
-        name_pattern = None
-        parts = folder_name.split(" - ")
-        if len(parts) >= 2:
-            name_parts = parts[1].split()
-            filtered_parts = [p for p in name_parts if not (p.isdigit() and len(p) == 6)]
-            if len(filtered_parts) >= 2:
-                name_pattern = f"{filtered_parts[-2]} {filtered_parts[-1]}"
+    v_date = match.group(1)      # 视频日期
+    v_name = match.group(2).strip() # 成员名（不论中英日）
+    v_time = int(match.group(3)) # 视频时间戳（转成数字方便计算）
+    logging.debug(f"解析成功：日期={v_date}, 名字={v_name}, 时间戳={v_time}")
 
-        # 5. 执行智能搜索
-        if name_pattern and subtitle_dir.exists():
-            # 获取所有符合日期和人名的字幕
-            subtitle_files = list(subtitle_dir.glob(f"{date_part} Showroom*{name_pattern}*.ass"))
+    # 2. 遍历字幕目录
+    if not SUBTITLES_SOURCE_ROOT.exists():
+        return False
+
+    best_match_sub = None
+    min_diff = 999999 # 初始设为一个很大的秒数
+
+    # 扫描所有comments.json
+    for sub_file in SUBTITLES_SOURCE_ROOT.rglob("*comments.json"):
+        sub_name = sub_file.stem
+        
+        # 匹配规则：字幕文件名里必须包含日期和成员名
+        if v_date in sub_name and v_name in sub_name:
+            # 尝试从字幕文件名提取时间戳数字
+            sub_time_match = re.search(r'(\d{6})', sub_name.replace(v_date, "", 1)) # 排除掉日期后的第一个6位数字
             
-            if subtitle_files:
-                target_subtitle = None
+            if sub_time_match:
+                s_time = int(sub_time_match.group(1))
+                diff = abs(v_time - s_time) # 计算时间差
                 
-                if len(subtitle_files) == 1:
-                    target_subtitle = subtitle_files[0]
-                elif video_ts_val is not None:
-                    # 如果有多个字幕，找时间戳最接近的一个
-                    best_diff = float('inf')
-                    for sub in subtitle_files:
-                        try:
-                            # 提取字幕文件名中的时间戳 (假设也在末尾)
-                            sub_ts_str = sub.stem.split()[-1]
-                            if sub_ts_str.isdigit() and len(sub_ts_str) == 6:
-                                diff = abs(int(sub_ts_str) - video_ts_val)
-                                if diff < best_diff:
-                                    best_diff = diff
-                                    target_subtitle = sub
-                        except:
-                            continue
-                
-                # 如果没能通过时间戳筛选，保底取第一个
-                if not target_subtitle:
-                    target_subtitle = subtitle_files[0]
+                # 如果时间差在 60 秒（1分钟）以内，且是目前最接近的
+                if diff < 60 and diff < min_diff:
+                    min_diff = diff
+                    best_match_sub = sub_file
 
-                # 6. 自动创建软链接
-                try:
-                    log(f"找到最匹配字幕: {target_subtitle.name} (对应视频: {folder_name})")
-                    exact_subtitle.symlink_to(target_subtitle)
-                    return True
-                except FileExistsError:
-                    return True
-                except Exception as e:
-                    log(f"✗ 创建软链接失败: {e}")
-                    return False
-        
-        return False
-        
-    except Exception as e:
-        if DEBUG_MODE:
-            log(f"解析匹配出错: {folder_name}, 错误: {e}")
-        return False
+    if best_match_sub:
+        logging.info(f"✅ 成功匹配字幕: {best_match_sub.name} (时间误差: {min_diff}秒)")
+        return True
+
+    return False
 
 def get_earliest_active_folder(all_folders):
     """获取最早的活跃文件夹（当前录制中且有文件的文件夹中最早创建的）"""
@@ -323,14 +302,14 @@ def get_db_pool():
                 password=DB_PASSWORD,
                 dsn=TNS_ALIAS,
                 min=0,          # 不使用时保持 0 个连接，节省资源
-                max=5,          # 20人直播时，5个连接足以应对
+                max=10,          # 20人直播时，10个连接足以应对
                 increment=1,
                 threaded=True,  # 支持多线程安全
                 getmode=cx_Oracle.SPOOL_ATTRVAL_WAIT
             )
-            log("✨ 数据库连接池已初始化 (按需分配)")
+            logging.info("✨ 数据库连接池已初始化 (按需分配)")
         except Exception as e:
-            log(f"❌ 初始化连接池失败: {e}")
+            logging.error(f"❌ 初始化连接池失败: {e}")
     return db_pool
 
 
@@ -350,14 +329,12 @@ def read_is_live(member_id: str):
                 
                 if result:
                     is_live = bool(result[0])
-                    if VERBOSE_LOGGING:
-                        log(f"数据库状态: {member_id} is_live={is_live}")
+                    
+                    logging.info(f"数据库状态: {member_id} is_live={is_live}")
                     return is_live
                 return False
     except Exception as e:
-        # 如果数据库一天只开几小时，关闭期间这里会记录错误，但不影响主程序运行
-        if VERBOSE_LOGGING:
-            log(f"查询成员 {member_id} 状态失败 (数据库可能未开启): {e}")
+        logging.error(f"查询成员 {member_id} 状态失败 (数据库可能未开启): {e}")
         return False
 
 def extract_member_name_from_folder(folder_name: str) -> Optional[str]:
@@ -386,8 +363,7 @@ def extract_member_name_from_folder(folder_name: str) -> Optional[str]:
                 return filtered_parts[-1].lower()
 
     except Exception as e:
-        if DEBUG_MODE:
-            log(f"解析人名失败: {folder_name}, 错误: {e}")
+        logging.error(f"解析人名失败: {folder_name}, 错误: {e}")
             
     return None
 
@@ -466,9 +442,7 @@ def check_live_folder_incremental(ts_dir: Path, checked_files: set, valid_files:
     
     if not unchecked_files:
         return
-    
-    if DEBUG_MODE or VERBOSE_LOGGING:
-        log(f"[{base_name}] 发现 {len(unchecked_files)} 个新的稳定文件需要检查")
+    logging.debug(f"[{base_name}] 发现 {len(unchecked_files)} 个新的稳定文件需要检查")
     
     # 检查新文件
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -482,10 +456,9 @@ def check_live_folder_incremental(ts_dir: Path, checked_files: set, valid_files:
             
             if valid_file:
                 valid_files.append(valid_file)
-                if DEBUG_MODE:
-                    log(f"[{base_name}] ✓ {ts_file.name}")
+                logging.debug(f"[{base_name}] ✓ {ts_file.name}")
             if err_msg:
-                log(f"[{base_name}] {err_msg}")
+                logging.error(f"[{base_name}] {err_msg}")
                 error_logs.append(err_msg)
 
 
@@ -500,7 +473,7 @@ def finalize_live_check(ts_dir: Path, checked_files: set, valid_files: list, err
     unchecked_files = [f for f in ts_files if f not in checked_files]
     
     if unchecked_files:
-        log(f"[{base_name}] 最终检查剩余 {len(unchecked_files)} 个文件")
+        logging.debug(f"[{base_name}] 最终检查剩余 {len(unchecked_files)} 个文件")
         
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = {executor.submit(check_ts_file, f): f for f in unchecked_files}
@@ -511,7 +484,7 @@ def finalize_live_check(ts_dir: Path, checked_files: set, valid_files: list, err
                 if valid_file:
                     valid_files.append(valid_file)
                 if err_msg:
-                    log(f"[{base_name}] {err_msg}")
+                    logging.error(f"[{base_name}] {err_msg}")
                     error_logs.append(err_msg)
     
     # 按文件名排序
@@ -523,12 +496,12 @@ def finalize_live_check(ts_dir: Path, checked_files: set, valid_files: list, err
             # 如果有有效文件，写入列表
             for vf in valid_files:
                 f.write(f"file '{vf.resolve()}'\n")
-            log(f"[{base_name}] 检查完成，共 {len(valid_files)} 个有效文件")
+            logging.debug(f"[{base_name}] 检查完成，共 {len(valid_files)} 个有效文件")
             result_success = True
         else:
             # 如果没有有效文件，写入一个标记注释，防止后续循环重复检查
             f.write(f"# No valid .ts files found. Marked as checked at {datetime.now()}\n")
-            log(f"[{base_name}] 没有有效的 .ts 文件，已标记为检查完成。")
+            logging.debug(f"[{base_name}] 没有有效的 .ts 文件，已标记为检查完成。")
             result_success = False
     
     # 写日志文件
@@ -542,11 +515,10 @@ def finalize_live_check(ts_dir: Path, checked_files: set, valid_files: list, err
             if not result_success:
                  logf.write("此文件夹中未找到任何有效的视频流文件，已强制标记完成。\n\n")
             logf.write("\n".join(error_logs))
-        log(f"[{base_name}] 存在异常/为空，日志写入：{log_file}")
+        logging.error(f"[{base_name}] 存在异常/为空，日志写入：{log_file}")
     
     # 返回的是检查是否找到了有效文件
     return result_success
-
 
 # ========================= 文件夹处理逻辑 =========================
 
@@ -568,21 +540,19 @@ def process_single_folder(ts_dir: Path, folder_states: dict, all_folders: list, 
     
     # 检查是否已经完成检查
     if has_been_merged(ts_dir):
-        if DEBUG_MODE:
-            log(f"直播 {base_name} 已检查完成，跳过")
+        logging.debug(f"直播 {base_name} 已检查完成，跳过")
         return True  # 返回True表示该文件夹已完成
     
     # 检查文件数量是否足够开始检查
     if not has_files_to_check(ts_dir):
-        if DEBUG_MODE:
-            ts_count = len(list(ts_dir.glob("*.ts")))
-            log(f"直播 {base_name} 文件数量不足({ts_count}/{MIN_FILES_FOR_CHECK})，等待中...")
+        ts_count = len(list(ts_dir.glob("*.ts")))
+        logging.debug(f"直播 {base_name} 文件数量不足({ts_count}/{MIN_FILES_FOR_CHECK})，等待中...")
         return False  # 返回False表示该文件夹还不能处理
     
     # 直播进行中 - 增量检查稳定的文件
     if current_time - state['last_check'] >= LIVE_CHECK_INTERVAL:
-        if VERBOSE_LOGGING:
-            log(f"处理中：{base_name}，进行增量检查...")
+        
+        logging.debug(f"处理中：{base_name}，进行增量检查...")
         check_live_folder_incremental(
             ts_dir, 
             state['checked_files'], 
@@ -591,9 +561,8 @@ def process_single_folder(ts_dir: Path, folder_states: dict, all_folders: list, 
         )
         state['last_check'] = current_time
     else:
-        if DEBUG_MODE:
-            remaining = LIVE_CHECK_INTERVAL - (current_time - state['last_check'])
-            log(f"文件夹 {base_name} 等待 {remaining:.0f} 秒后进行下次检查")
+        remaining = LIVE_CHECK_INTERVAL - (current_time - state['last_check'])
+        logging.debug(f"文件夹 {base_name} 等待 {remaining:.0f} 秒后进行下次检查")
     
     return False  # 直播还在进行中，文件夹未完成
 
@@ -612,13 +581,12 @@ def cleanup_old_folder_states(folder_states: dict, active_folders: list, current
             folders_to_remove.append(folder_path)
     
     for folder_path in folders_to_remove:
-        if DEBUG_MODE:
-            log(f"清理过期文件夹状态: {folder_path.name}")
+        logging.debug(f"清理过期文件夹状态: {folder_path.name}")
         del folder_states[folder_path]
 
 def merge_worker():
     """独立的合并工作线程，从队列中串行执行合并任务"""
-    log("✨ 合并工作线程已启动")
+    logging.info("✨ 合并工作线程已启动")
     
     while True:
         try:
@@ -626,37 +594,36 @@ def merge_worker():
             task = merge_queue.get()
             
             if task is None:  # None 是停止信号
-                log("合并工作线程收到停止信号")
+                logging.info("合并工作线程收到停止信号")
                 break
             
             group_key, group_folders = task
             
             try:
-                log(f"🔄 [合并队列] 开始合并: {group_key}")
+                logging.info(f"🔄 [合并队列] 开始合并: {group_key}")
                 earliest_folder = min(group_folders, key=lambda x: x.stat().st_ctime)
                 merged_video = OUTPUT_DIR / f"{earliest_folder.name}{OUTPUT_EXTENSION}"
                 
                 if not merged_video.exists():
                     merge_once(target_folders=group_folders)
-                    log(f"✅ [合并队列] 完成: {group_key}")
+                    logging.info(f"✅ [合并队列] 完成: {group_key}")
                 else:
-                    log(f"⏭️  [合并队列] 文件已存在，跳过: {group_key}")
+                    logging.warning(f"⏭️  [合并队列] 文件已存在，跳过: {group_key}")
                     
             except Exception as e:
-                log(f"❌ [合并队列] 失败 {group_key}: {e}")
-                import traceback
-                log(traceback.format_exc())
+                logging.error(f"❌ [合并队列] 失败 {group_key}: {e}")
+                logging.error(traceback.format_exc())
             finally:
                 merge_queue.task_done()  # 标记任务完成
                 
         except Exception as e:
-            log(f"合并工作线程异常: {e}")
+            logging.error(f"合并工作线程异常: {e}")
             time.sleep(1)
 
 # ========================= 主循环 =========================
 
 def main_loop():
-    log("开始监控直播文件夹...")
+    logging.info("开始监控直播文件夹...")
     
     # 启动合并工作线程
     merge_thread = Thread(target=merge_worker, daemon=True, name="MergeWorker")
@@ -688,8 +655,7 @@ def main_loop():
 
                         # 如果该组超过限制,只取最早的N个
                         if len(group_folders) > MAX_CONCURRENT_FOLDERS_PER_LIVE:
-                            if DEBUG_MODE:
-                                log(f"直播组 {group_key} 有 {len(group_folders)} 个文件夹,限制为 {MAX_CONCURRENT_FOLDERS_PER_LIVE} 个")
+                            logging.debug(f"直播组 {group_key} 有 {len(group_folders)} 个文件夹,限制为 {MAX_CONCURRENT_FOLDERS_PER_LIVE} 个")
                             group_folders = group_folders[:MAX_CONCURRENT_FOLDERS_PER_LIVE]
                             grouped[group_key] = group_folders  # ← 更新 grouped 字典
 
@@ -706,8 +672,7 @@ def main_loop():
                     grouped = {}  # 空字典
 
             if not all_folders:
-                if DEBUG_MODE:
-                    log("未找到直播文件夹,等待中...")
+                logging.debug("未找到直播文件夹,等待中...")
                 time.sleep(CHECK_INTERVAL)
                 continue
             
@@ -742,15 +707,15 @@ def main_loop():
                     
                     # 【强制退出等待】字幕未找到，但检查次数达到 5 次
                     if not group_has_subtitle and subtitle_check_count[group_key] >= 5:
-                        log(f"字幕文件检查已达到 {subtitle_check_count[group_key]} 次,判定为无字幕视频: {group_key}")
+                        logging.warning(f"字幕文件检查已达到 {subtitle_check_count[group_key]} 次,判定为无字幕视频: {group_key}")
                         group_has_subtitle = True  # 强制通过
                     
                     if group_has_subtitle:
                         group_can_merge = True  # 字幕找到或已强制通过，允许合并
-                        log(f"[{group_key}] 满足合并条件 (字幕找到或超时)，开始最终检查。")
+                        logging.info(f"[{group_key}] 满足合并条件 (字幕找到或超时)，开始最终检查。")
                     else:
                         # 仍在等待字幕，计数器未达到 5 次
-                        log(f"[{group_key}] 等待字幕文件生成中... (第 {subtitle_check_count[group_key]} 次检查)")
+                        logging.warning(f"[{group_key}] 等待字幕文件生成中... (第 {subtitle_check_count[group_key]} 次检查)")
 
                 # 3. 如果满足合并条件 (group_can_merge)
                 if group_can_merge:
@@ -758,7 +723,7 @@ def main_loop():
                     # (A) 最终检查 (调用 finalize_live_check，此时会创建 filelist.txt 标记)
                     for ts_dir in group_folders:
                         if not has_been_merged(ts_dir):  # 再次检查防止重复操作
-                            log(f"对已结束的直播进行最终检查: {ts_dir.name}")
+                            logging.info(f"对已结束的直播进行最终检查: {ts_dir.name}")
                             # 确保 folder_states 中有该文件夹的状态
                             if ts_dir not in folder_states:
                                 folder_states[ts_dir] = {'checked_files': set(), 'valid_files': [], 'error_logs': []}
@@ -775,11 +740,11 @@ def main_loop():
                         merged_video = OUTPUT_DIR / f"{earliest_folder.name}{OUTPUT_EXTENSION}"
 
                         if not merged_video.exists():
-                            log(f"📋 直播组 {group_key} 已完成检查，加入合并队列 (当前队列: {merge_queue.qsize()} 个任务)")
+                            logging.info(f"📋 直播组 {group_key} 已完成检查，加入合并队列 (当前队列: {merge_queue.qsize()} 个任务)")
                             merge_queue.put((group_key, group_folders))
                             submitted_merges.add(group_key)  # 标记为已提交
                         else:
-                            log(f"⏭️  直播组 {group_key} 合并文件已存在，跳过")
+                            logging.warning(f"⏭️  直播组 {group_key} 合并文件已存在，跳过")
 
                 # 4. 如果仍在直播/文件活跃，则继续执行增量检查
                 elif group_is_streaming or group_files_active:
@@ -799,8 +764,7 @@ def main_loop():
                               if key not in active_group_keys]
             
             for key in keys_to_remove:
-                if DEBUG_MODE:
-                    log(f"清理字幕计数器中已完成/不活跃的组: {key}")
+                logging.debug(f"清理字幕计数器中已完成/不活跃的组: {key}")
                 del subtitle_check_count[key]
                 # 同时清理已提交的合并记录
                 if key in submitted_merges:
@@ -809,24 +773,23 @@ def main_loop():
             time.sleep(CHECK_INTERVAL)
             
     except KeyboardInterrupt:
-        log("收到停止信号，正在清理资源...")
+        logging.warning("收到停止信号，正在清理资源...")
         if db_pool:
             try:
                 db_pool.close() # 显式关闭连接池，释放所有数据库会话
-                log("数据库连接池已安全关闭")
+                logging.info("数据库连接池已安全关闭")
             except:
                 pass
         merge_queue.join()
-        log("程序退出")
+        logging.info("程序退出")
     except Exception as e:
-        log(f"主循环发生错误: {e}")
-        import traceback
-        log(traceback.format_exc())
+        logging.error(f"主循环发生错误: {e}")
+        logging.error(traceback.format_exc())
     finally: 
         if db_pool:
             try:
                 db_pool.close()
-                log("数据库连接池已关闭")
+                logging.info("数据库连接池已关闭")
             except:
                 pass
 

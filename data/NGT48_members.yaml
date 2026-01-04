@@ -1,0 +1,1089 @@
+members:
+- id: reina_seiji
+  room_id: '61730'
+  name_jp: 清司 麗菜
+  name_en: Reina Seiji
+  team: NGT48 一期生
+  enabled: true
+  room_url_key: 48_SEIJI_REINA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      清司 麗菜
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #一期生 #清司麗菜 #Showroom
+    tags:
+    - NGT48
+    - 一期生
+    - 清司麗菜
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: marina_nishigata
+  room_id: '61721'
+  name_jp: 西潟 茉莉奈
+  name_en: Marina Nishigata
+  team: NGT48 一期生
+  enabled: true
+  room_url_key: 48_NISHIGATA_MARINA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      西潟 茉莉奈
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #一期生 #西潟茉莉奈 #Showroom
+    tags:
+    - NGT48
+    - 一期生
+    - 西潟茉莉奈
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: kairi_sato
+  room_id: '146975'
+  name_jp: 佐藤 海里
+  name_en: Kairi Sato
+  team: NGT48 ドラフト3期生
+  enabled: true
+  room_url_key: 48_SATO_KAIRI
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      佐藤 海里
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #ドラフト3期生 #佐藤海里 #Showroom
+    tags:
+    - NGT48
+    - ドラフト3期生
+    - 佐藤海里
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: miyu_fujisaki
+  room_id: '146990'
+  name_jp: 藤崎 未夢
+  name_en: Miyu Fujisaki
+  team: NGT48 ドラフト3期生
+  enabled: true
+  room_url_key: 48_FUJISAKI_MIYU
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      藤崎 未夢
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #ドラフト3期生 #藤崎未夢 #Showroom
+    tags:
+    - NGT48
+    - ドラフト3期生
+    - 藤崎未夢
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: nanami_otsuka
+  room_id: '175355'
+  name_jp: 大塚 七海
+  name_en: Nanami Otsuka
+  team: NGT48 2期生
+  enabled: true
+  room_url_key: 48_OTSUKA_NANAMI
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      大塚 七海
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #2期生 #大塚七海 #Showroom
+    tags:
+    - NGT48
+    - 2期生
+    - 大塚七海
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: hino_mimura
+  room_id: '175461'
+  name_jp: 三村 妃乃
+  name_en: Hino Mimura
+  team: NGT48 2期生
+  enabled: true
+  room_url_key: 48_MIMURA_HINO
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      三村 妃乃
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #2期生 #三村妃乃 #Showroom
+    tags:
+    - NGT48
+    - 2期生
+    - 三村妃乃
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: rua_isobe
+  room_id: '403154'
+  name_jp: 磯部 瑠紅
+  name_en: Rua Isobe
+  team: NGT48 3期生
+  enabled: true
+  room_url_key: 48_ISOBE_RUA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      磯部 瑠紅
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #3期生 #磯部瑠紅 #Showroom
+    tags:
+    - NGT48
+    - 3期生
+    - 磯部瑠紅
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: hanae_kita
+  room_id: '403172'
+  name_jp: 喜多 花恵
+  name_en: Hanae Kita
+  team: NGT48 3期生
+  enabled: true
+  room_url_key: 48_KITA_HANAE
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      喜多 花恵
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #3期生 #喜多花恵 #Showroom
+    tags:
+    - NGT48
+    - 3期生
+    - 喜多花恵
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: yuha_kitamura
+  room_id: '403173'
+  name_jp: 北村 優羽
+  name_en: Yuha Kitamura
+  team: NGT48 3期生
+  enabled: true
+  room_url_key: 48_KITAMURA_YUHA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      北村 優羽
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #3期生 #北村優羽 #Showroom
+    tags:
+    - NGT48
+    - 3期生
+    - 北村優羽
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: yuna_kimoto
+  room_id: '403162'
+  name_jp: 木本 優菜
+  name_en: Yuna Kimoto
+  team: NGT48 3期生
+  enabled: true
+  room_url_key: 48_KIMOTO_YUNA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      木本 優菜
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #3期生 #木本優菜 #Showroom
+    tags:
+    - NGT48
+    - 3期生
+    - 木本優菜
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: natsuki_suizu
+  room_id: '403171'
+  name_jp: 水津 菜月
+  name_en: Natsuki Suizu
+  team: NGT48 3期生
+  enabled: true
+  room_url_key: 48_SUIZU_NATSUKI
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      水津 菜月
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #3期生 #水津菜月 #Showroom
+    tags:
+    - NGT48
+    - 3期生
+    - 水津菜月
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: moe_sugimoto
+  room_id: '403176'
+  name_jp: 杉本 萌
+  name_en: Moe Sugimoto
+  team: NGT48 3期生
+  enabled: true
+  room_url_key: 48_SUGIMOTO_MOE
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      杉本 萌
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #3期生 #杉本萌 #Showroom
+    tags:
+    - NGT48
+    - 3期生
+    - 杉本萌
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: ririka_suzuki
+  room_id: '403177'
+  name_jp: 鈴木 凛々花
+  name_en: Ririka Suzuki
+  team: NGT48 3期生
+  enabled: true
+  room_url_key: 48_SUZUKI_RIRIKA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      鈴木 凛々花
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #3期生 #鈴木凛々花 #Showroom
+    tags:
+    - NGT48
+    - 3期生
+    - 鈴木凛々花
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: juna_aso
+  room_id: '501934'
+  name_jp: 浅生 珠菜
+  name_en: Juna Aso
+  team: NGT48 4期生
+  enabled: true
+  room_url_key: 48_ASO_JUNA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      浅生 珠菜
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #4期生 #浅生珠菜 #Showroom
+    tags:
+    - NGT48
+    - 4期生
+    - 浅生珠菜
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: nana_isozaki
+  room_id: '501935'
+  name_jp: 磯崎 菜々
+  name_en: Nana Isozaki
+  team: NGT48 4期生
+  enabled: true
+  room_url_key: 48_ISOZAKI_NANA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      磯崎 菜々
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #4期生 #磯崎菜々 #Showroom
+    tags:
+    - NGT48
+    - 4期生
+    - 磯崎菜々
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: momoka_okumura
+  room_id: '486741'
+  name_jp: 奥村 百花
+  name_en: Momoka Okumura
+  team: NGT48 4期生
+  enabled: true
+  room_url_key: 48_OKUMURA_MOMOKA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      奥村 百花
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #4期生 #奥村百花 #Showroom
+    tags:
+    - NGT48
+    - 4期生
+    - 奥村百花
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: anna_kimoto
+  room_id: '486739'
+  name_jp: 木本 杏菜
+  name_en: Anna Kimoto
+  team: NGT48 4期生
+  enabled: true
+  room_url_key: 48_KIMOTO_ANNA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      木本 杏菜
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #4期生 #木本杏菜 #Showroom
+    tags:
+    - NGT48
+    - 4期生
+    - 木本杏菜
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: hiroka_sato
+  room_id: '486736'
+  name_jp: 佐藤 広花
+  name_en: Hiroka Sato
+  team: NGT48 4期生
+  enabled: true
+  room_url_key: 48_SATO_HIROKA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      佐藤 広花
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #4期生 #佐藤広花 #Showroom
+    tags:
+    - NGT48
+    - 4期生
+    - 佐藤広花
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: aoi_shinzawa
+  room_id: '486734'
+  name_jp: 新沢 葵唯
+  name_en: Aoi Shinzawa
+  team: NGT48 4期生
+  enabled: true
+  room_url_key: 48_SHINZAWA_AOI
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      新沢 葵唯
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #4期生 #新沢葵唯 #Showroom
+    tags:
+    - NGT48
+    - 4期生
+    - 新沢葵唯
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: yua_takashima
+  room_id: '486738'
+  name_jp: 高島 柚愛
+  name_en: Yua Takashima
+  team: NGT48 4期生
+  enabled: true
+  room_url_key: 48_TAKASHIMA_YUA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      高島 柚愛
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #4期生 #高島柚愛 #Showroom
+    tags:
+    - NGT48
+    - 4期生
+    - 高島柚愛
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: haruna_nishikawa
+  room_id: '486746'
+  name_jp: 西川 晴菜
+  name_en: Haruna Nishikawa
+  team: NGT48 4期生
+  enabled: true
+  room_url_key: 48_NISHIKAWA_HARUNA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      西川 晴菜
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #4期生 #西川晴菜 #Showroom
+    tags:
+    - NGT48
+    - 4期生
+    - 西川晴菜
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: ayumi_hara
+  room_id: '501937'
+  name_jp: 原 愛実
+  name_en: Ayumi Hara
+  team: NGT48 4期生
+  enabled: true
+  room_url_key: 48_HARA_AYUMI
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      原 愛実
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #4期生 #原愛実 #Showroom
+    tags:
+    - NGT48
+    - 4期生
+    - 原愛実
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: merii_yoshihara
+  room_id: '486740'
+  name_jp: 吉原 愛里衣
+  name_en: Merii Yoshihara
+  team: NGT48 4期生
+  enabled: true
+  room_url_key: 48_YOSHIHARA_MERII
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      吉原 愛里衣
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #4期生 #吉原愛里衣 #Showroom
+    tags:
+    - NGT48
+    - 4期生
+    - 吉原愛里衣
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: yui_azama
+  room_id: '539271'
+  name_jp: 安座間 結
+  name_en: Yui Azama
+  team: NGT48 5期生
+  enabled: true
+  room_url_key: 48_AZAMA_YUI
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      安座間 結
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #5期生 #安座間結 #Showroom
+    tags:
+    - NGT48
+    - 5期生
+    - 安座間結
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: yume_adachi
+  room_id: '544803'
+  name_jp: 阿達 夢
+  name_en: Yume Adachi
+  team: NGT48 5期生
+  enabled: true
+  room_url_key: 48_ADACHI_YUME
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      阿達 夢
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #5期生 #阿達夢 #Showroom
+    tags:
+    - NGT48
+    - 5期生
+    - 阿達夢
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: yuka_omachi
+  room_id: '539262'
+  name_jp: 大町 佑香
+  name_en: Yuka Omachi
+  team: NGT48 5期生
+  enabled: true
+  room_url_key: 48_OMACHI_YUKA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      大町 佑香
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #5期生 #大町佑香 #Showroom
+    tags:
+    - NGT48
+    - 5期生
+    - 大町佑香
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: mizuki_kai
+  room_id: '539276'
+  name_jp: 甲斐 瑞季
+  name_en: Mizuki Kai
+  team: NGT48 5期生
+  enabled: true
+  room_url_key: 48_KAI_MIZUKI
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      甲斐 瑞季
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #5期生 #甲斐瑞季 #Showroom
+    tags:
+    - NGT48
+    - 5期生
+    - 甲斐瑞季
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: mone_kitazawa
+  room_id: '539259'
+  name_jp: 北澤 百音
+  name_en: Mone Kitazawa
+  team: NGT48 5期生
+  enabled: true
+  room_url_key: 48_KITAZAWA_MONE
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      北澤 百音
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #5期生 #北澤百音 #Showroom
+    tags:
+    - NGT48
+    - 5期生
+    - 北澤百音
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: yuka_sato
+  room_id: '539273'
+  name_jp: 佐藤 柚花
+  name_en: Yuka Sato
+  team: NGT48 5期生
+  enabled: true
+  room_url_key: 48_SATO_YUKA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      佐藤 柚花
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #5期生 #佐藤柚花 #Showroom
+    tags:
+    - NGT48
+    - 5期生
+    - 佐藤柚花
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: rinka_suto
+  room_id: '539266'
+  name_jp: 須藤 凜華
+  name_en: Rinka Suto
+  team: NGT48 5期生
+  enabled: true
+  room_url_key: 48_SUTO_RINKA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      須藤 凜華
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #5期生 #須藤凜華 #Showroom
+    tags:
+    - NGT48
+    - 5期生
+    - 須藤凜華
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: haruka_taniguchi
+  room_id: '539278'
+  name_jp: 谷口 陽香
+  name_en: Haruka Taniguchi
+  team: NGT48 5期生
+  enabled: true
+  room_url_key: 48_TANIGUCHI_HARUKA
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      谷口 陽香
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #5期生 #谷口陽香 #Showroom
+    tags:
+    - NGT48
+    - 5期生
+    - 谷口陽香
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: tokine_tsujita
+  room_id: '539279'
+  name_jp: 辻田 季音
+  name_en: Tokine Tsujita
+  team: NGT48 5期生
+  enabled: true
+  room_url_key: 48_TSUJITA_TOKINE
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      辻田 季音
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #5期生 #辻田季音 #Showroom
+    tags:
+    - NGT48
+    - 5期生
+    - 辻田季音
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: asami_nakata
+  room_id: '539261'
+  name_jp: 中田 麻実
+  name_en: Asami Nakata
+  team: NGT48 5期生
+  enabled: true
+  room_url_key: 48_NAKATA_ASAMI
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      中田 麻実
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #5期生 #中田麻実 #Showroom
+    tags:
+    - NGT48
+    - 5期生
+    - 中田麻実
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
+- id: hiyori_minagawa
+  room_id: '544808'
+  name_jp: 皆川 日和
+  name_en: Hiyori Minagawa
+  team: NGT48 5期生
+  enabled: true
+  room_url_key: 48_MINAGAWA_HIYORI
+  youtube:
+    title_template: ''
+    description_template: |-
+      【チャンネル情報】
+      AKB48 橋本陽菜さんのアーカイブは、
+      専用チャンネルにて全て公开中です！
+
+      ▼ 専用チャンネルはこちら
+      https://www.youtube.com/@harupyon_SR
+      ぜひチェックしてください！
+
+      皆川 日和
+      コメント付き:https://www.kg46.com
+      アップロード时间:{upload_time}
+
+      #NGT48 #5期生 #皆川日和 #Showroom
+    tags:
+    - NGT48
+    - 5期生
+    - 皆川日和
+    - Showroom
+    category_id: '22'
+    privacy_status: public
+    playlist_id: PLyNni4d8ng2dU2r9jE51my9fWNyrltzU6
+    use_primary_account: true
