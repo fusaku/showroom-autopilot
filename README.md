@@ -1,6 +1,6 @@
 # Showroom Autopilot
 
-一个全自动的 SHOWROOM 直播监控、录制、处理和上传系统，专为 AKB48 系列偶像团体设计。
+一个全自动的 SHOWROOM 直播监控、录制、处理和上传系统。
 
 ## 📋 目录
 
