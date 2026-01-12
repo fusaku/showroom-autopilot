@@ -115,6 +115,30 @@ else:
 # ==== 数据库队列 (不需要锁了,因为异步是单线程) ====
 db_queue = Queue(maxsize=1000)
 
+def reconnect_db(max_retries=3):
+    """
+    数据库重连函数，支持重试
+    返回: (conn, cursor) 或 (None, None)
+    """
+    for attempt in range(max_retries):
+        try:
+            logging.info(f"[DB-Writer] 尝试重连数据库 (第 {attempt + 1}/{max_retries} 次)...")
+            conn = get_db_connection()
+            if conn:
+                cursor = conn.cursor()
+                # 测试连接是否有效
+                cursor.execute("SELECT 1 FROM DUAL")
+                cursor.fetchone()
+                logging.info(f"[DB-Writer] ✅ 数据库重连成功")
+                return conn, cursor
+        except Exception as e:
+            logging.error(f"[DB-Writer] 重连失败 (第 {attempt + 1}/{max_retries} 次): {e}")
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)  # 指数退避: 1秒, 2秒, 4秒
+    
+    logging.error(f"[DB-Writer] ❌ 数据库重连失败，已尝试 {max_retries} 次")
+    return None, None
+
 # ==== 数据库连接 ====
 def save_to_db(member_id, room_id, is_live_flag, started_at, prev_status, member):
     """将数据放入队列,由专门线程写入数据库"""
@@ -162,33 +186,60 @@ def db_writer_thread(stop_flag):
             UPDATED_AT = SYSTIMESTAMP
         WHERE ID = (SELECT MAX(ID) FROM {DB_HISTORY_TABLE} WHERE MEMBER_ID = :member_id AND ENDED_AT IS NULL)
     """
-
+    # ✅ 心跳计数器（移到这里）
+    last_check_time = time.time() # 改用时间戳
+    
     while not stop_flag[0] or not db_queue.empty():
+        # --- A. 检查并确保连接可用 ---
+        current_time = time.time()  # ✅ 必须放在 if 之前定义
+        
+        # 只要连接没了，或者超过30秒没检查，就触发检测
+        if conn is None or cursor is None or (current_time - last_check_time > 30):
+            need_reconnect = False
+            try:
+                if conn and cursor:
+                    # ✅ 主动心跳检测
+                    cursor.execute("SELECT 1 FROM DUAL")
+                    cursor.fetchone()
+                    last_check_time = current_time # 只有成功才更新时间
+                else:
+                    need_reconnect = True
+            except Exception as hb_error:
+                logging.warning(f"[DB-Writer] 心跳检测失败: {hb_error}")
+                need_reconnect = True
+
+            # 执行重连逻辑
+            if need_reconnect:
+                logging.warning("[DB-Writer] 正在尝试恢复数据库连接...")
+                conn, cursor = reconnect_db()
+                if conn:
+                    load_balancer = LoadBalancer(conn)
+                    last_check_time = time.time() # 重连成功，重置时间
+                else:
+                    # ✅ 核心保护：连不上就休眠并跳过本次循环，数据会留在队列里
+                    time.sleep(5)
+                    continue
         try:
             # 1. 阻塞等待队列中的第一个数据，超时 1 秒
             data = db_queue.get(timeout=1.0)
             batch_buffer = [data]
-
             # 2. 【核心】瞬间排空队列里剩余的所有数据 (这 277 条会瞬间被拿出来)
             while not db_queue.empty():
                 try:
                     batch_buffer.append(db_queue.get_nowait())
                 except:
                     break
-            
+                
             # 3. 按 member_id 去重，只保留本轮最新的状态
             unique_buffer = {d['member_id']: d for d in batch_buffer}
             final_list = list(unique_buffer.values())
-
             # 4. 执行批量操作
             if final_list and conn:
                 if cursor is None: cursor = conn.cursor()
-                
                 all_bind_params = []
                 history_inserts = []
                 history_updates = []
                 check_time = datetime.now()
-
                 for d in final_list:
                     all_bind_params.append({
                         'member_id_param': d['member_id'],
@@ -207,7 +258,6 @@ def db_writer_thread(stop_flag):
                             'room_id': d['room_id'], 
                             'started_at': d['started_at']
                         })
-                        
                         # ✅ 新增：立即分配录制器
                         try:
                             recorder_id = load_balancer.assign_recorder(d['member_id'])
@@ -215,30 +265,25 @@ def db_writer_thread(stop_flag):
                                 logging.info(f"[分配] {d['member_id']} → {recorder_id}")
                         except Exception as e:
                             logging.error(f"[分配失败] {d['member_id']}: {e}")
-                    
                     elif not d['is_live_flag'] and d['prev_is_live']:
                         # 下播：更新历史记录
                         history_updates.append({
                             'ended_at': check_time, 
                             'member_id': d['member_id']
                         })
-                        
                         # ✅ 新增：清除分配
                         try:
                             load_balancer.clear_assignment(d['member_id'])
                             logging.debug(f"[清除分配] {d['member_id']}")
                         except Exception as e:
                             logging.error(f"[清除失败] {d['member_id']}: {e}")
-
                 # 5. 一次性写入并提交 (这是 277 条数据最快的入库方式)
                 cursor.executemany(merge_sql, all_bind_params)
                 if history_inserts: cursor.executemany(insert_history_sql, history_inserts)
                 if history_updates: cursor.executemany(update_history_sql, history_updates)
-                
                 conn.commit()
                 # ✅ 累加处理数量，但不立刻打日志
                 total_processed_in_round += len(final_list)
-                
             # 4. 重点：判断是否达到 5 秒的日志周期
             current_time = time.time()
             if current_time - last_log_time >= 5.0:
@@ -250,11 +295,45 @@ def db_writer_thread(stop_flag):
             # 标记完成
             for _ in range(len(batch_buffer)):
                 db_queue.task_done()
-                
         except Exception as e:
-            if 'data' in locals(): # 避免 timeout 导致的异常
-                logging.error(f"数据库写入错误: {e}")
-                if conn: conn.rollback()
+            if 'data' in locals():
+                error_obj = None
+                # 判断是否是数据库连接错误
+                if isinstance(e, cx_Oracle.DatabaseError):
+                    error_obj, = e.args
+                    logging.error(f"[DB-Writer] 数据库错误: {error_obj.code} - {error_obj.message}")
+                else:
+                    logging.error(f"[DB-Writer] 数据库写入错误: {e}")
+                # 安全回滚
+                try:
+                    if conn:
+                        conn.rollback()
+                except Exception as rollback_error:
+                    logging.warning(f"[DB-Writer] 回滚失败（连接可能已断开）: {rollback_error}")
+                # 🔥 关键：如果是连接错误，尝试重连
+                if error_obj and error_obj.code in [3113, 3114, 1089, 1090, 28, 12535, 12537]:
+                    logging.warning(f"[DB-Writer] 检测到连接错误 (ORA-{error_obj.code})，开始重连...")
+                    # 关闭旧连接
+                    try:
+                        if cursor:
+                            cursor.close()
+                        if conn:
+                            conn.close()
+                    except:
+                        pass
+                    
+                    # 重连
+                    conn, cursor = reconnect_db()
+                    # 重新初始化 LoadBalancer
+                    if conn:
+                        try:
+                            load_balancer = LoadBalancer(conn)
+                            logging.info("[DB-Writer] LoadBalancer 已重新初始化")
+                        except Exception as lb_error:
+                            logging.error(f"[DB-Writer] LoadBalancer 初始化失败: {lb_error}")
+                    else:
+                        logging.error("[DB-Writer] ❌ 重连失败，将在下次循环继续尝试")
+                        time.sleep(5)  # 等待5秒再继续
             continue
 
     # ✅ while 循环结束后，线程退出前处理剩余数据
