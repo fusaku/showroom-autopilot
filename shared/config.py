@@ -267,3 +267,39 @@ GLOBAL_TEMPLATES = _templates_dict
 def get_enabled_members():
     """获取启用的成员列表(兼容旧代码)"""
     return ENABLED_MEMBERS
+
+# ============================================================
+# 11. Oracle对象存储配置
+# ============================================================
+
+# 加载对象存储凭证
+BUCKET_CREDENTIALS_FILE = Path(__file__).resolve().parent / "bucket_credentials.key"
+
+def load_bucket_credentials():
+    """从 bucket_credentials.key 加载对象存储配置"""
+    if not BUCKET_CREDENTIALS_FILE.exists():
+        logging.warning(f"未找到对象存储配置文件: {BUCKET_CREDENTIALS_FILE}")
+        return None, None, "ap-tokyo-1"
+    try:
+        with open(BUCKET_CREDENTIALS_FILE, 'r', encoding='utf-8') as f:
+            lines = [line.strip() for line in f.readlines()]
+            namespace = lines[0] if len(lines) > 0 else None
+            bucket_name = lines[1] if len(lines) > 1 else None
+            region = lines[2] if len(lines) > 2 else "ap-tokyo-1"
+            return namespace, bucket_name, region
+    except Exception as e:
+        logging.error(f"读取对象存储配置文件失败: {e}")
+        return None, None, "ap-tokyo-1"
+
+# 加载配置
+BUCKET_NAMESPACE, BUCKET_NAME, BUCKET_REGION = load_bucket_credentials()
+
+# 对象存储配置
+BUCKET_PREFIX = "showroom/videos/"       # 存储路径前缀
+USE_INSTANCE_PRINCIPAL = True            # 使用实例主体认证
+BUCKET_DELETE_AFTER_UPLOAD = False       # 上传后删除本地文件
+BUCKET_CREATE_UPLOAD_MARKER = True       # 创建上传标记
+BUCKET_ENABLE_AUTO_UPLOAD = True         # 启用自动上传
+
+# 上传过滤配置
+BUCKET_UPLOAD_MEMBER_FILTER = "AKB48 Team 8 Hashimoto Haruna"

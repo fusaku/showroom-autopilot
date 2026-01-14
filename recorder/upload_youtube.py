@@ -21,6 +21,8 @@ from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 from github_pages_publisher import publish_to_github_pages
 from config import *
+from upload_oracle_bucket_wallet import upload_all_pending_to_bucket
+
 
 # 全局变量
 LAST_QUOTA_EXHAUSTED_DATE = {
@@ -737,6 +739,20 @@ def _upload_all_pending_videos_internal(directory: Path):
                 logging.debug("GitHub Pages 同步完成")
             except Exception as e:
                 logging.error(f"GitHub Pages 同步失败: {e}")
+
+            # ========== 新增:Oracle对象存储上传 ==========
+            if BUCKET_ENABLE_AUTO_UPLOAD:
+                logging.info("🪣 检测到新上传，触发Oracle对象存储上传...")
+                try:
+                    uploaded_count = upload_all_pending_to_bucket()
+                    if uploaded_count > 0:
+                        logging.info(f"✅ 对象存储上传完成: {uploaded_count} 个视频")
+                    else:
+                        logging.info("ℹ️  没有待上传到对象存储的视频")
+                except Exception as e:
+                    logging.error(f"❌ 对象存储上传失败: {e}")
+                    logging.debug(f"详细错误:\n{traceback.format_exc()}")
+            # =============================================
 
     if not directory.exists():
         logging.warning(f"目录不存在: {directory}")
