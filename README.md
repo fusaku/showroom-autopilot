@@ -1,448 +1,440 @@
 # Showroom Autopilot
 
-一个全自动的 SHOWROOM 直播监控、录制、处理和上传系统。
-
-## 📋 目录
-
-- [功能特性](#功能特性)
-- [系统架构](#系统架构)
-- [目录结构](#目录结构)
-- [环境要求](#环境要求)
-- [快速开始](#快速开始)
-- [配置说明](#配置说明)
-- [使用方法](#使用方法)
-- [工作流程](#工作流程)
-- [常见问题](#常见问题)
-
-## ✨ 功能特性
-
-### 已实现功能
-
-- **智能监控** - 实时监控成员直播状态，支持多实例负载均衡
-- **自动录制** - 检测到直播开始时自动启动录制服务
-- **视频处理** - 智能合并 TS 分段，支持跨日直播处理
-- **字幕嵌入** - 自动匹配和嵌入 ASS 字幕文件
-- **YouTube 上传** - 自动上传到 YouTube，支持多账号配额管理
-- **负载均衡** - 智能分配录制任务到多个实例
-
-### 核心特性
-
-- **进程管理** - 自动检测和清理重复进程，防止资源浪费
-- **故障恢复** - 智能重启异常进程，确保录制不中断
-- **文件锁机制** - 防止多实例同时处理相同任务
-- **配额管理** - YouTube API 配额智能切换，避免超限
-- **日志记录** - 完整的日志系统，便于问题排查
-- **GitHub Pages 发布** - 自动发布上传记录到静态网站
-
-### 🚧 计划功能
-
-- 完整的数据库初始化脚本
-- Web 管理界面
-- 实时监控面板
-- 更多直播平台支持
-
-## 🏗️ 系统架构
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Oracle 数据库                         │
-│          (直播状态 + 实例管理 + 历史记录)                 │
-└────────────┬────────────────────────────────┬───────────┘
-             │                                │
-    ┌────────┴────────┐              ┌────────┴────────┐
-    │   Monitor 模块   │              │  Recorder 模块   │
-    │  (直播监控)      │              │  (录制管理)      │
-    ├─────────────────┤              ├─────────────────┤
-    │ • 轮询直播状态   │              │ • 智能启动录制   │
-    │ • 更新数据库     │              │ • 进程监控       │
-    │ • 负载均衡       │              │ • 视频合并       │
-    │ • 多实例支持     │              │ • 字幕处理       │
-    └─────────────────┘              │ • YouTube 上传   │
-                                     └─────────────────┘
-```
-
-**核心组件说明:**
-
-- **Monitor (监控器)**: 实时检测成员直播状态，支持多实例分片监控
-- **Recorder (录制器)**: 管理录制进程，处理视频文件，上传到 YouTube
-- **Load Balancer (负载均衡)**: 智能分配录制任务到不同实例
-- **Database (数据库)**: 存储直播状态、实例信息和历史记录
-
-## 📁 目录结构
-
-```
-showroom-autopilot-master/
-├── data/                          # 成员配置数据
-│   ├── AKB48_members.yaml        # AKB48 成员配置
-│   ├── SKE48_members.yaml        # SKE48 成员配置
-│   ├── NMB48_members.yaml        # NMB48 成员配置
-│   ├── HKT48_members.yaml        # HKT48 成员配置
-│   ├── NGT48_members.yaml        # NGT48 成员配置
-│   └── STU48_members.yaml        # STU48 成员配置
-│
-├── monitor/                       # 监控模块
-│   ├── monitor_showroom.py       # 主监控脚本
-│   ├── manage_instances.py       # 实例管理
-│   ├── load_balancer_module.py   # 负载均衡器
-│   ├── config.py                 # 配置文件
-│   ├── logger_config.py          # 日志配置
-│   └── db_members_loader.py      # 成员数据加载器
-│
-├── recorder/                      # 录制模块
-│   ├── showroom-smart-start.py   # 智能启动服务
-│   ├── checker.py                # 文件检查器
-│   ├── merger.py                 # 视频合并器
-│   ├── subtitle_processor.py     # 字幕处理器
-│   ├── upload_youtube.py         # YouTube 上传器
-│   ├── github_pages_publisher.py # GitHub Pages 发布器
-│   ├── restart_handler.py        # 重启处理器
-│   ├── config.py                 # 配置文件
-│   ├── logger_config.py          # 日志配置
-│   └── db_members_loader.py      # 成员数据加载器
-│
-└── shared/                        # 共享模块
-    ├── config.py                 # 全局配置
-    ├── logger_config.py          # 日志配置
-    ├── db_members_loader.py      # 成员数据加载器
-    ├── db_credentials.key        # 数据库凭证（需配置）
-    └── credentials/              # API 凭证目录
-        ├── autoupsr/             # 主 YouTube 账号
-        ├── 48g-SR/               # 副 YouTube 账号
-        └── idol-SR/              # 第三 YouTube 账号
-
-```
-
-## 💻 环境要求
-
-### 系统要求
-
-- **操作系统**: Ubuntu 24.04 LTS（推荐）或其他 Linux 发行版
-- **Python**: 3.8+
-- **数据库**: Oracle Database（需要钱包文件）
-- **存储空间**: 至少 100GB（用于视频文件）
-
-### 必需软件
-
-```bash
-# FFmpeg（视频处理）
-ffmpeg >= 4.3
-
-# Python 包
-cx_Oracle >= 8.3.0
-httpx >= 0.24.0
-psutil >= 5.9.0
-google-api-python-client >= 2.0.0
-google-auth-oauthlib >= 0.4.0
-PyYAML >= 6.0
-```
-
-### 可选软件
-
-- Git（用于 GitHub Pages 发布）
-- YouTube API 密钥（用于自动上传）
-
-## 🚀 快速开始
-
-### 1. 环境准备
-
-```bash
-# 克隆仓库
-git clone <repository-url>
-cd showroom-autopilot-master
-
-# 安装 Python 依赖
-pip install cx_Oracle httpx psutil PyYAML
-pip install google-api-python-client google-auth-oauthlib
-
-# 安装 FFmpeg (Ubuntu)
-sudo apt update
-sudo apt install ffmpeg
-```
-
-### 2. 数据库配置
-
-创建 `shared/db_credentials.key` 文件 (第一行用户名,第二行密码):
-
-```
-your_username
-your_password
-```
-
-编辑 `shared/config.py` 设置数据库钱包路径:
-
-```python
-WALLET_DIR = "/path/to/your/Wallet_SRDB"
-TNS_ALIAS = "srdb_high"
-```
-
-### 3. 配置成员信息
-
-编辑 `data/` 目录下的 YAML 文件，启用要监控的成员:
-
-```yaml
-members:
-  - id: member_id
-    room_id: '12345'
-    name_jp: 成员名
-    enabled: true  # 设置为 true 启用监控
-    # ... 其他配置
-```
-
-### 4. YouTube 配置 (可选)
-
-如需自动上传功能:
-
-1. 在 Google Cloud Console 创建项目并启用 YouTube Data API v3
-2. 下载 OAuth 2.0 凭证文件
-3. 放置到 `shared/credentials/autoupsr/client_secret.json`
-4. 首次运行会提示授权
-
-### 5. 启动服务
-
-```bash
-# 启动监控服务
-INSTANCE_ID=monitor-a python monitor/monitor_showroom.py
-
-# 启动录制服务 (另一个终端)
-INSTANCE_ID=recorder-a python recorder/showroom-smart-start.py
-```
-
-## 📖 使用方法
-
-### 监控服务
-
-**单实例模式** (监控所有成员):
-```bash
-INSTANCE_ID=monitor-a python monitor/monitor_showroom.py
-```
-
-**多实例模式** (自动分片):
-```bash
-# 实例 A
-INSTANCE_ID=monitor-a python monitor/monitor_showroom.py
-
-# 实例 B (在另一台机器或终端)
-INSTANCE_ID=monitor-b python monitor/monitor_showroom.py
-```
-
-系统会自动从数据库读取活跃实例数,平均分配监控任务。
-
-### 录制服务
-
-```bash
-# 启动智能录制管理器
-INSTANCE_ID=recorder-a python recorder/showroom-smart-start.py
-```
-
-录制器会:
-1. 监控数据库中分配的直播任务
-2. 自动启动 Showroom Live Watcher 录制进程
-3. 检测并清理重复进程
-4. 异常时自动重启
-
-### 实例管理
-
-```bash
-# 查看所有实例状态
-python monitor/manage_instances.py status
-
-# 注册新实例
-python monitor/manage_instances.py register monitor-c
-
-# 停用实例
-python monitor/manage_instances.py deactivate monitor-c
-```
-
-### 手动操作
-
-```bash
-# 手动合并视频
-python recorder/merger.py
-
-# 手动上传到 YouTube
-python recorder/upload_youtube.py
-```
-
-## ⚙️ 配置说明
-
-### 主配置文件 (`shared/config.py`)
-
-```python
-# 数据库配置
-WALLET_DIR = "/home/ubuntu/Wallet_SRDB"  # Oracle 钱包目录
-TNS_ALIAS = "srdb_high"                   # TNS 别名
-
-# 路径配置
-PARENT_DIR = Path("~/Downloads/Showroom/active")  # 录制文件目录
-OUTPUT_DIR = Path("/mnt/video/merged")             # 输出目录
-
-# 监控配置
-CHECK_INTERVAL = 30                      # 检测间隔(秒)
-LIVE_INACTIVE_THRESHOLD = 60            # 直播结束判定时间(秒)
-MAX_WORKERS = 16                         # 并发线程数
-
-# 视频处理
-SUBTITLE_OFFSET_SECONDS = 12            # 字幕偏移(秒)
-FFMPEG_LOGLEVEL = "error"               # FFmpeg 日志级别
-```
-
-### 成员配置 (`data/*.yaml`)
-
-每个成员的配置包含:
-
-- `id`: 成员唯一标识
-- `room_id`: SHOWROOM 房间号
-- `name_jp` / `name_en`: 日文/英文名
-- `team`: 所属团队
-- `enabled`: 是否启用监控
-- `youtube`: YouTube 上传配置 (标题、描述、标签等)
-
-### 实例配置
-
-通过环境变量 `INSTANCE_ID` 指定实例标识:
-
-- 监控实例: `monitor-a`, `monitor-b`, ...
-- 录制实例: `recorder-a`, `recorder-b`, ...
-
-系统会自动从数据库读取实例数量并分配任务。
-
-## 🗄️ 数据库要求
-
-系统需要 Oracle 数据库支持,包含以下表结构:
-
-### 必需表
-
-- **LIVE_STATUS** - 存储实时直播状态
-- **INSTANCES** - 管理监控和录制实例
-- **SHOWROOM_LIVE_HISTORY** - 保存历史直播记录
-
-### 配置数据库
-
-1. 准备 Oracle 数据库实例
-2. 下载并配置 Wallet 文件
-3. 创建所需的表结构
-4. 在 `shared/config.py` 中配置连接信息
-
-> **注意**: 数据库初始化 SQL 脚本将在后续版本中提供。
-
-## 🔄 工作流程
-
-### 完整工作流
-
-```
-监控服务 → 检测直播开始 → 更新数据库 → 负载均衡分配
-                                        ↓
-                                   录制服务启动
-                                        ↓
-                            Showroom Live Watcher 录制
-                                        ↓
-                              检测直播结束 + 文件稳定
-                                        ↓
-                                   合并 TS 文件
-                                        ↓
-                                   嵌入字幕 (可选)
-                                        ↓
-                                上传到 YouTube (可选)
-                                        ↓
-                              发布到 GitHub Pages (可选)
-```
-
-### 关键特性
-
-**智能进程管理**
-- 每轮只扫描 1 次系统进程 (性能提升 100 倍)
-- 自动检测并清理重复进程
-- 异常进程自动重启
-
-**灵活的实例模式**
-- 单实例: 一个监控器监控所有成员
-- 多实例: 自动分片,每个监控器负责部分成员
-- 动态扩展: 新增实例自动重新分配任务
-
-**智能视频处理**
-- 支持跨日直播合并
-- 自动检测文件夹分组
-- 字幕自动匹配和时间轴调整
-
-## ❓ 常见问题
-
-### Q: 如何添加新成员?
-
-编辑对应团队的 YAML 文件 (如 `data/AKB48_members.yaml`),添加成员信息并设置 `enabled: true`,然后重启监控服务。
-
-### Q: 支持多台服务器运行吗?
-
-支持。只需在每台服务器上设置不同的 `INSTANCE_ID`,系统会自动分配任务。例如:
-- 服务器 A: `INSTANCE_ID=monitor-a`
-- 服务器 B: `INSTANCE_ID=monitor-b`
-
-### Q: 录制失败怎么办?
-
-检查:
-1. Showroom Live Watcher 是否安装且版本最新
-2. 网络连接是否正常
-3. 磁盘空间是否充足
-4. 查看日志文件排查错误
-
-### Q: YouTube 上传失败?
-
-可能原因:
-- API 配额不足 (系统会自动切换备用账号)
-- 视频文件损坏 (检查 FFmpeg 合并日志)
-- 网络问题 (系统会自动重试)
-
-### Q: 如何查看运行日志?
-
-日志默认保存在 `~/logs/` 目录:
-```bash
-tail -f ~/logs/monitor.log    # 监控日志
-tail -f ~/logs/recorder.log   # 录制日志
-```
-
-### Q: 系统需要什么权限?
-
-- 读写录制目录和输出目录的权限
-- 创建和终止进程的权限
-- 访问数据库的权限
-- (可选) YouTube API 访问权限
-
-## 🔧 技术栈
-
-- **Python 3.8+** - 主要开发语言
-- **Oracle Database** - 数据存储
-- **Showroom Live Watcher** - 直播录制
-- **FFmpeg** - 视频处理
-- **YouTube Data API v3** - 视频上传
-- **httpx** - HTTP 请求
-- **psutil** - 进程管理
-
-## 📝 更新日志
-
-### v2.0 (当前版本)
-
-- ✨ 多实例负载均衡
-- 🚀 智能进程管理 (性能提升 100 倍)
-- 🔧 自动清理重复进程
-- 📊 改进的数据库设计
-- 🐛 修复跨日直播处理
-
-### 未来计划
-
-- 🚧 完整的数据库初始化脚本
-- 🚧 Web 管理界面
-- 🚧 实时监控面板
-- 🚧 Docker 容器化部署
-
-## 📄 许可证
-
-本项目采用 MIT 许可证。
-
-## 🙏 致谢
-
-- [Showroom Live Watcher](https://github.com/wlerin/showroom) - 视频下载工具
-- [FFmpeg](https://ffmpeg.org/) - 音视频处理
-- [SHOWROOM](https://www.showroom-live.com/) - 直播平台
+SHOWROOM 配信の全自動監視・録画・処理・アップロードシステム。AKB48を中心とした48Gグループメンバーの配信アーカイブに特化して設計されています。
+
+## 目次
+
+- [機能概要](#機能概要)
+- [システム構成](#システム構成)
+- [ディレクトリ構造](#ディレクトリ構造)
+- [環境要件](#環境要件)
+- [セットアップ](#セットアップ)
+- [起動方法](#起動方法)
+- [設定詳細](#設定詳細)
+- [処理フロー](#処理フロー)
+- [アーキテクチャメモ](#アーキテクチャメモ)
 
 ---
 
-**免责声明**: 本项目仅供学习和研究使用,请遵守相关平台的服务条款。
+## 機能概要
+
+### 実装済み機能
+
+| カテゴリ | 機能 |
+|----------|------|
+| **監視** | 非同期HTTPによるリアルタイム配信状態ポーリング（30個のIPアドレスを使ったIP分散） |
+| **録画管理** | psutil によるプロセス管理・重複プロセス自動排除・録画プロセスの自動再起動 |
+| **ファイル検査** | ffprobe による TS フラグメントの映像/音声ストリーム検証 |
+| **重複排除** | MD5 ハッシュ + ファイルサイズによるクロスフォルダ重複 TS 検出 (`TSDeduplicator`) |
+| **マルチフォルダ統合** | 接続断による複数フォルダ分割を自動検出・同一配信として統合 |
+| **字幕処理** | JSON コメントログ → ASS 字幕変換、時間軸オフセット調整、マルチ JSON 結合 |
+| **動画合併** | ffmpeg concat によるフラグメント統合（ファイルロック付きで多重処理防止） |
+| **YouTube アップロード** | OAuth2 認証、複数アカウントによる API クォータ分散、再開可能アップロード |
+| **GitHub Pages 発布** | `videos.jsonl` + 字幕ファイルの自動 Git コミット＆プッシュ |
+| **4C 連携** | rsync による別サーバーへのリアルタイム TS 同期（分解能判定付き） |
+| **アップスケール** | 360p 配信を 1080p へ ffmpeg 変換（4C サーバー上で実行） |
+| **Oracle Bucket** | Oracle Object Storage への完成 MP4 自動アップロード |
+| **クォータ管理** | 太平洋時間 0:00 基準の YouTube API クォータ自動切替 |
+| **ロードバランシング** | 複数録画インスタンスへの配信タスク自動割当 |
+| **負荷分散監視** | 複数検出インスタンスによるメンバーのシャード分割監視 |
+
+---
+
+## システム構成
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Oracle Database (SRDB)                        │
+│         LIVE_STATUS / INSTANCES / MEMBER_INSTANCES / MEMBERS         │
+│                   SHOWROOM_LIVE_HISTORY / GROUPS                     │
+└────────┬────────────────────────────┬───────────────────────────────┘
+         │                            │
+┌────────┴────────┐          ┌────────┴──────────────────────────┐
+│  Monitor モジュール  │          │         Recorder モジュール          │
+│  (3C サーバー)   │          │         (3C サーバー)               │
+├─────────────────┤          ├──────────────────────────────────┤
+│ monitor_showroom│          │ showroom-smart-start.py          │
+│  .py            │          │  ∟ psutil でプロセス管理           │
+│  ∟ 30 IP 分散   │          │  ∟ DB から担当メンバー取得          │
+│  ∟ httpx 非同期  │          │                                  │
+│  ∟ DB 書込スレッド│          │ checker.py                       │
+│  ∟ ロードバランサ  │          │  ∟ TS 検証 (ffprobe)             │
+│                 │          │  ∟ TSDeduplicator                │
+│ manage_instances│          │  ∟ 字幕待機ロジック                 │
+│  .py            │          │  ∟ merge_queue → merger.py       │
+└─────────────────┘          │  ∟ rsync → 4C サーバー            │
+                              │                                  │
+                              │ merger.py                        │
+                              │  ∟ ffmpeg concat                 │
+                              │  ∟ FileLock 排他制御              │
+                              │  ∟ upload_youtube.py 呼出し      │
+                              │                                  │
+                              │ upload_youtube.py                │
+                              │  ∟ Google API OAuth2             │
+                              │  ∟ 3 アカウント クォータ管理        │
+                              │  ∟ github_pages_publisher.py     │
+                              │  ∟ Oracle Bucket アップロード     │
+                              └──────────────────────────────────┘
+                                           ↓ rsync (360p TSのみ)
+                              ┌──────────────────────────────────┐
+                              │      4C サーバー (checker_4c.py)  │
+                              │  ∟ upscaler.py (360p → 1080p)   │
+                              │  ∟ merger.py (1080p 版合併)      │
+                              └──────────────────────────────────┘
+```
+
+### コンポーネント説明
+
+**Monitor（検出器）**
+- `monitor_showroom.py`: 非同期 httpx クライアントを最大 30 個生成し、各クライアントを異なる送信元 IP にバインドして Showroom API を並列ポーリング。状態変化をキューに積み、バックグラウンドスレッドが Oracle DB へバッチ書き込み。
+- `load_balancer_module.py`: 配信開始イベント発生時に `MEMBER_INSTANCES` テーブルへ自動的に録画インスタンスを割り当てる。
+- `manage_instances.py`: インスタンス一覧・登録・状態変更・ハートビート更新 の CLI ツール。
+
+**Recorder（録画管理）**
+- `showroom-smart-start.py`: DB から本インスタンス担当メンバーを取得し、psutil で全 `showroom.py` プロセスをスキャン。重複プロセスは最古のものを保留して残りをkill。接管プロセスには 10 秒バッファ期間を設ける。
+- `checker.py`: 配信フォルダを監視し、TS ファイルを逐次 ffprobe 検証。`TSDeduplicator` で断線再接続による重複フラグメントをMD5で排除。配信終了・字幕確認後に `merge_queue` へタスクを投入。
+- `checker_4c.py`: 4C サーバー上で動作。rsync 経由で届いた 360p TS を ffmpeg で 1080p にアップスケールし、完了後に merger へ渡す。
+- `merger.py`: `filelist.txt` を元に ffmpeg concat で MP4 を生成。FileLock で多重実行を防止。完了後に `upload_youtube.py` を非同期サブプロセスとして起動。
+- `restart_handler.py`: TS ファイルの更新停止を監視して `showroom-*.service` を自動再起動。MD5ハッシュによる"ゴースト録画"（HLS デッドループ）検出も実装。
+- `upload_youtube.py`: 3 アカウント（主推専用・AKB48汎用・その他）のクォータを太平洋時間で管理。再開可能アップロードに 30 秒タイムアウトを設定し、失敗時はアップロードセッションを再作成して最大 5 回リトライ。
+- `github_pages_publisher.py`: アップロード後に `videos.jsonl` と処理済み ASS 字幕ファイルを GitHub Pages リポジトリへコミット・プッシュ。
+- `subtitle_processor.py`: JSON コメントログを弾幕スタイル ASS 字幕に変換。複数 JSON の自動結合・破損 JSON の修復・時間軸オフセット適用に対応。
+
+**Shared（共有モジュール）**
+- `config.py`: 全設定の一元管理。DB 接続・パス・YouTube API・Git・Oracle Bucket・rsync 同期モードを定義。
+- `db_members_loader.py`: Oracle DB からメンバー設定をロード（60 秒キャッシュ付き）。YAML ファイルを廃止して DB を単一ソースとする。
+- `sync_module.py`: rsync による 4C サーバーへの TS 同期。ffprobe で分解能を確認し、720p 以上は同期スキップ（4C は低解像度のみ担当）。`should_run_local_upload()` でYouTubeアップロードの担当サーバーを判定。
+- `logger_config.py`: systemd ジャーナル向けのシンプルなログ初期化。
+
+---
+
+## ディレクトリ構造
+
+```
+showroom-autopilot/
+├── data/                          # メンバー設定 YAML (DB の初期値/参照用)
+│   ├── AKB48_members.yaml
+│   ├── SKE48_members.yaml
+│   ├── NMB48_members.yaml
+│   ├── HKT48_members.yaml
+│   ├── NGT48_members.yaml
+│   └── STU48_members.yaml
+│
+├── monitor/                       # 配信検出モジュール
+│   ├── monitor_showroom.py        # 非同期メイン検出ループ
+│   ├── load_balancer_module.py    # 録画インスタンス割当
+│   ├── manage_instances.py        # インスタンス管理 CLI
+│   ├── config.py → shared/config.py
+│   ├── logger_config.py → shared/logger_config.py
+│   └── db_members_loader.py → shared/db_members_loader.py
+│
+├── recorder/                      # 録画・処理モジュール
+│   ├── showroom-smart-start.py    # メイン録画管理デーモン
+│   ├── checker.py                 # TS 検証・合併トリガー (3C)
+│   ├── checker_4c.py              # TS アップスケール・合併 (4C)
+│   ├── merger.py                  # ffmpeg 動画合併
+│   ├── subtitle_processor.py      # JSON → ASS 字幕変換
+│   ├── upload_youtube.py          # YouTube アップロード
+│   ├── github_pages_publisher.py  # GitHub Pages 公開
+│   ├── restart_handler.py         # 録画プロセス監視・再起動
+│   ├── upscaler.py                # 360p → 1080p 変換 (4C)
+│   ├── cleanup.py                 # 完了済みファイル削除
+│   ├── upload_oracle_bucket_wallet.py  # Oracle Bucket アップロード
+│   ├── config.py → shared/config.py
+│   ├── logger_config.py → shared/logger_config.py
+│   └── db_members_loader.py → shared/db_members_loader.py
+│
+└── shared/                        # 全モジュール共通
+    ├── config.py                  # 全設定定義
+    ├── db_members_loader.py       # DB メンバーローダー
+    ├── logger_config.py           # ログ設定
+    ├── sync_module.py             # rsync 同期・分流判定
+    ├── db_credentials.key         # DB 認証情報 (要設定)
+    ├── bucket_credentials.key     # Oracle Bucket 設定 (任意)
+    ├── 4c24g_server.conf          # 4C サーバー接続情報 (任意)
+    └── credentials/               # YouTube OAuth クレデンシャル
+        ├── autoupsr/              # 主推専用アカウント
+        ├── 48g-SR/                # AKB48 汎用アカウント
+        └── idol-SR/               # その他グループ用アカウント
+```
+
+---
+
+## 環境要件
+
+### システム
+
+- **OS**: Ubuntu 24.04 LTS
+- **Python**: 3.10 以上
+- **ストレージ**: 100GB 以上（録画一時保存用）
+
+### 必須ソフトウェア
+
+```bash
+# FFmpeg / FFprobe
+sudo apt install ffmpeg
+
+# Python パッケージ
+pip install cx_Oracle httpx psutil PyYAML google-api-python-client \
+            google-auth-oauthlib tabulate
+
+# Showroom Live Watcher (録画ツール)
+# https://github.com/wlerin/showroom
+```
+
+### 必須インフラ
+
+| 項目 | 詳細 |
+|------|------|
+| Oracle Database | Wallet ファイル + TNS 設定 |
+| Oracle Cloud VM | 無料枠 ARM インスタンス推奨 |
+| YouTube Data API v3 | Google Cloud Console で有効化 |
+
+---
+
+## セットアップ
+
+### 1. DB 認証情報の設定
+
+```
+shared/db_credentials.key
+```
+```
+your_oracle_username
+your_oracle_password
+```
+
+### 2. Oracle Wallet の配置
+
+```bash
+# Wallet を展開
+unzip Wallet_SRDB.zip -d /home/ubuntu/Wallet_SRDB
+
+# config.py の WALLET_DIR を確認
+WALLET_DIR = "/home/ubuntu/Wallet_SRDB"
+TNS_ALIAS  = "srdb_high"
+```
+
+### 3. DB テーブルの作成
+
+最低限必要なテーブル:
+
+| テーブル名 | 用途 |
+|-----------|------|
+| `ADMIN.LIVE_STATUS` | 配信リアルタイム状態 |
+| `ADMIN.MEMBERS` | メンバーマスター |
+| `ADMIN.GROUPS` | グループマスター |
+| `ADMIN.YOUTUBE_CONFIGS` | YouTube 設定 |
+| `ADMIN.YOUTUBE_TAGS` | タグ |
+| `ADMIN.INSTANCES` | 監視・録画インスタンス |
+| `ADMIN.MEMBER_INSTANCES` | インスタンス割当 |
+| `ADMIN.SHOWROOM_LIVE_HISTORY` | 配信履歴 |
+
+### 4. インスタンス登録
+
+```bash
+# 監視インスタンス登録
+python monitor/manage_instances.py --register monitor-a monitor "検出器A" --capacity 300
+
+# 録画インスタンス登録
+python monitor/manage_instances.py --register recorder-a recorder "録画サーバーA" --capacity 20
+```
+
+### 5. YouTube 認証
+
+```bash
+# 初回のみブラウザ認証が必要
+python recorder/upload_youtube.py
+```
+OAuth 認証完了後、`shared/credentials/*/youtube_token.pickle` に保存されます。
+
+### 6. 4C サーバー設定（任意）
+
+360p 配信を 1080p へアップスケールして保存する場合:
+
+```
+shared/4c24g_server.conf
+```
+```
+192.168.x.x          # リモートサーバー IP
+22                   # SSH ポート
+```
+
+---
+
+## 起動方法
+
+### 監視サービス（3C サーバー）
+
+```bash
+# 単一インスタンス（全メンバー監視）
+INSTANCE_ID=monitor-a python monitor/monitor_showroom.py
+
+# 複数インスタンス（DB のアクティブインスタンス数で自動シャード分割）
+# サーバー A
+INSTANCE_ID=monitor-a python monitor/monitor_showroom.py
+# サーバー B
+INSTANCE_ID=monitor-b python monitor/monitor_showroom.py
+```
+
+### 録画管理サービス（3C サーバー）
+
+```bash
+INSTANCE_ID=recorder-a python recorder/showroom-smart-start.py
+```
+
+### TS 検証・合併サービス（3C サーバー）
+
+```bash
+python recorder/checker.py
+```
+
+### 4C サーバー
+
+```bash
+python recorder/checker_4c.py
+```
+
+### インスタンス状態確認
+
+```bash
+python monitor/manage_instances.py --list
+python monitor/manage_instances.py --load
+```
+
+---
+
+## 設定詳細
+
+主要な設定は `shared/config.py` に集約されています。
+
+### パス設定
+
+```python
+PARENT_DIR  = Path("~/Downloads/Showroom/active").expanduser()  # 録画フォルダ
+OUTPUT_DIR  = Path("/mnt/video/merged").expanduser()            # 完成 MP4 出力先
+LOCK_DIR    = OUTPUT_DIR / ".locks"                             # ファイルロック置き場
+```
+
+### 監視タイミング
+
+```python
+REQUEST_INTERVAL        = 5    # Showroom API ポーリング間隔（秒）
+CHECK_INTERVAL          = 30   # ファイル監視ループ間隔（秒）
+LIVE_INACTIVE_THRESHOLD = 60   # 配信終了判定（秒）
+FINAL_INACTIVE_THRESHOLD= 60   # 最終終了確認（秒）
+FILE_CHECK_GRACE_PERIOD = 35   # 録画プロセス起動後の猶予時間（秒）
+STOP_DELAY              = 300  # 配信終了後に録画プロセスを停止するまでの待機（秒）
+```
+
+### TS 重複排除
+
+```python
+# TSDeduplicator の TTL
+ttl = 43200  # 12 時間（同一配信の断線再接続をカバー）
+# MD5 計算に使用するバイト数
+hasher.update(f.read(524288))  # 先頭 512KB
+```
+
+### rsync 同期モード（`SYNC_MODE`）
+
+| 値 | 動作 |
+|----|------|
+| `"main"` | `MAIN_MEMBER_ID` で指定したメンバーの 360p TS のみ 4C へ転送 |
+| `"all"` | 全メンバーの 360p TS を転送 |
+| `"off"` | 同期無効（3C でのみ処理） |
+
+### YouTube アカウント分岐
+
+| 対象 | アカウント |
+|------|-----------|
+| 橋本陽菜 (`Hashimoto Haruna`) | 主アカウント (`autoupsr`) |
+| AKB48 メンバー | 副アカウント (`48g-SR`) |
+| その他グループ | 第三アカウント (`idol-SR`)（現在無効） |
+
+クォータ管理は太平洋時間 0:00 を基準に日次リセット。枯渇時は自動で別アカウントへ切替。
+
+### 字幕時間軸オフセット
+
+```python
+SUBTITLE_OFFSET_SECONDS = 12  # 録画開始から配信映像までの遅延補正（秒）
+```
+
+---
+
+## 処理フロー
+
+```
+Showroom API ポーリング（30 IP 並列）
+        │
+        ▼
+IS_LIVE = 1 を検出
+        │
+        ├─ LoadBalancer.assign_recorder()
+        │      ∟ MEMBER_INSTANCES に録画インスタンスを登録
+        │
+        ▼
+showroom-smart-start.py が検出
+        │
+        ▼
+showroom.py 録画プロセス起動
+        │ TS フラグメントを連続生成
+        ▼
+checker.py が監視
+        │
+        ├─ TSDeduplicator で重複排除
+        ├─ ffprobe で映像/音声ストリーム検証
+        ├─ 有効 TS を valid_files に追加
+        ├─ rsync で 4C サーバーに同期（360p のみ）
+        │
+        ▼ IS_LIVE = 0 かつ TS 更新停止
+        │
+        ├─ 字幕 JSON の存在確認（最大 5 回待機）
+        ├─ finalize_live_check() → filelist.txt 生成
+        │
+        ▼
+merge_queue に投入 → merger.py
+        │
+        ├─ ffmpeg concat → .mp4 生成
+        ├─ .merged マーカー作成
+        │
+        ▼
+upload_youtube.py（別プロセスとして非同期起動）
+        │
+        ├─ アカウント判定・OAuth2 認証
+        ├─ 再開可能アップロード（128MB チャンク）
+        ├─ プレイリストに追加
+        ├─ .uploaded マーカーに video_id を記録
+        ├─ Oracle Bucket にもアップロード
+        │
+        ▼
+github_pages_publisher.py
+        │
+        ├─ 字幕 JSON → ASS 変換・時間軸オフセット適用
+        ├─ videos.jsonl に追記
+        └─ git add / commit / push
+```
+
+---
+
+## アーキテクチャメモ
+
+### なぜ YAML でなく DB か
+
+`db_members_loader.py` が Oracle DB から直接メンバー設定を取得します（60 秒キャッシュ）。`data/` 以下の YAML ファイルは DB 初期投入の参照用として残っており、ランタイムでは使用されません。
+
+### フォルダ分割の統合ロジック
+
+SHOWROOM の HLS 録画では、ネットワーク断線が発生するたびに新しいフォルダが生成されます。`checker.py` の `group_folders_by_member()` は、同一メンバーのフォルダ群を TS ファイルのタイムスタンプ差（5 分以内）で判定し、同一配信として統合してから merger に渡します。
+
+### 4C サーバーへの分流
+
+`sync_module.py` の `should_run_local_upload()` が 3C/4C の役割分担を決定します。ffprobe で TS の分解能を確認し、360p の場合は 4C サーバーへ rsync 転送。4C 側で 1080p にアップスケールしてから合併・配布します。720p 以上の高解像度配信は 3C がそのまま処理します。
+
+### プロセス管理の設計
+
+`showroom-smart-start.py` はループごとに 1 回だけ `psutil.process_iter()` を呼び出し、全 showroom.py プロセスをスキャンします。各プロセスを「接管プロセス（起動前から存在）」と「自己起動プロセス」に分類し、それぞれ異なるバッファ時間と再起動ポリシーを適用することで、誤再起動を防ぎます。
+
+### ファイルロック
+
+merger.py は `fcntl.LOCK_EX | LOCK_NB` によるノンブロッキングの排他ロックを使用し、同一ファイルへの多重 ffmpeg 実行を防止します。checker.py の merge_queue はシングルスレッドのワーカーがシリアルに処理するため、キュー側での競合は発生しません。
