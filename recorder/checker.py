@@ -7,6 +7,7 @@ import traceback
 import logging
 import re
 import sys
+import hashlib
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "shared"))
@@ -20,6 +21,7 @@ from datetime import datetime
 from typing import Optional
 from queue import Queue
 from threading import Thread
+from sync_module import syncer
 
 os.environ["TNS_ADMIN"] = WALLET_DIR # 新增
 
@@ -367,6 +369,52 @@ def extract_member_name_from_folder(folder_name: str) -> Optional[str]:
             
     return None
 
+# ========================= 全局跨文件夹去重器 =========================
+class TSDeduplicator:
+    def __init__(self):
+        # 格式: { member_id: { "md5_size": timestamp } }
+        self.fingerprints = {}  
+        self.ttl = 43200  # 改为 12 小时（完全足够覆盖同一场长直播的任何断线重连）
+        self._insert_count = 0  # 新增：独立的全局插入计数器
+
+    def check_and_add(self, ts_file: Path) -> bool:
+        """检查文件是否重复。返回 True 表示重复，False 表示是新文件"""
+        folder_name = ts_file.parent.name
+        member_id = extract_member_name_from_folder(folder_name) or "unknown"
+        
+        if member_id not in self.fingerprints:
+            self.fingerprints[member_id] = {}
+
+        # 优化：使用独立计数器，严格每检查 1000 个文件（约 16 分钟）执行一次全局过期清理
+        self._insert_count += 1
+        if self._insert_count % 1000 == 0:
+            current_time = time.time()
+            for m_id in list(self.fingerprints.keys()):
+                self.fingerprints[m_id] = {
+                    k: v for k, v in self.fingerprints[m_id].items() 
+                    if current_time - v < self.ttl
+                }
+
+        # 计算哈希指纹（读取前 512KB 足以精确区分）
+        fsize = ts_file.stat().st_size
+        hasher = hashlib.md5()
+        try:
+            with open(ts_file, 'rb') as f:
+                hasher.update(f.read(524288))
+            fingerprint = f"{hasher.hexdigest()}_{fsize}"
+        except Exception:
+            fingerprint = f"{ts_file.name}_{fsize}" # 降级
+
+        # 判断并记录
+        if fingerprint in self.fingerprints[member_id]:
+            return True  # 拦截！是重复回放
+        else:
+            self.fingerprints[member_id][fingerprint] = time.time()
+            return False # 放行！是新文件
+
+# 实例化全局去重器
+global_deduplicator = TSDeduplicator()
+
 # ========================= 文件检查和处理 =========================
 
 def check_ts_file(ts_file: Path):
@@ -436,6 +484,9 @@ def get_unchecked_stable_files(ts_dir: Path, checked_files: set):
 def check_live_folder_incremental(ts_dir: Path, checked_files: set, valid_files: list, error_logs: list):
     """增量检查直播文件夹中的新文件"""
     base_name = ts_dir.name
+
+    # <---【修改点2A】新增：提前解析 Member ID，用于传给同步模块做判断
+    current_member_id = extract_member_name_from_folder(base_name)
     
     # 获取未检查且稳定的文件
     unchecked_files = get_unchecked_stable_files(ts_dir, checked_files)
@@ -455,8 +506,14 @@ def check_live_folder_incremental(ts_dir: Path, checked_files: set, valid_files:
             checked_files.add(ts_file)
             
             if valid_file:
-                valid_files.append(valid_file)
-                logging.debug(f"[{base_name}] ✓ {ts_file.name}")
+                # === 新增：调用全局去重器 ===
+                if global_deduplicator.check_and_add(ts_file):
+                    logging.warning(f"[{base_name}] 拦截跨文件夹重复片段: {ts_file.name}")
+                else:
+                    valid_files.append(valid_file)
+                    syncer.sync_to_4c(valid_file, member_id=current_member_id)
+                    logging.debug(f"[{base_name}] ✓ {ts_file.name}")
+                # ===========================
             if err_msg:
                 logging.error(f"[{base_name}] {err_msg}")
                 error_logs.append(err_msg)
@@ -472,6 +529,8 @@ def finalize_live_check(ts_dir: Path, checked_files: set, valid_files: list, err
     ts_files = list(ts_dir.glob("*.ts"))
     unchecked_files = [f for f in ts_files if f not in checked_files]
     
+    #【获取 Member ID 用于同步】
+    current_member_id = extract_member_name_from_folder(base_name)
     if unchecked_files:
         logging.debug(f"[{base_name}] 最终检查剩余 {len(unchecked_files)} 个文件")
         
@@ -482,13 +541,19 @@ def finalize_live_check(ts_dir: Path, checked_files: set, valid_files: list, err
                 valid_file, err_msg = future.result()
                 
                 if valid_file:
-                    valid_files.append(valid_file)
+                    # === 新增：调用全局去重器 ===
+                    if global_deduplicator.check_and_add(ts_file):
+                        logging.warning(f"[{base_name}] 最终检查拦截重复: {ts_file.name}")
+                    else:
+                        valid_files.append(valid_file)
+                        syncer.sync_to_4c(valid_file, member_id=current_member_id)
+                    # ===========================
                 if err_msg:
                     logging.error(f"[{base_name}] {err_msg}")
                     error_logs.append(err_msg)
     
     # 按文件名排序
-    valid_files.sort()
+    valid_files.sort(key=lambda f: [int(c) if c.isdigit() else c.lower() for c in re.split(r'(\d+)', f.name)])
     
     # 写 filelist.txt：无论是否有有效文件，都需要创建这个文件作为检查完成的标记
     with open(filelist_txt, "w", encoding="utf-8") as f:
@@ -503,6 +568,25 @@ def finalize_live_check(ts_dir: Path, checked_files: set, valid_files: list, err
             f.write(f"# No valid .ts files found. Marked as checked at {datetime.now()}\n")
             logging.debug(f"[{base_name}] 没有有效的 .ts 文件，已标记为检查完成。")
             result_success = False
+    
+    # 目的：把刚才生成的 filelist.txt 传给 4C，作为“结束信号”
+    try:
+        # 1. 解析成员ID
+        member_id = extract_member_name_from_folder(ts_dir.name)
+        
+        # 2. 发送信号
+        # 新代码：直接调用审计方法，因为它就是 txt 文件
+        syncer.sync_filelist_and_audit(filelist_txt, member_id=member_id)
+        
+        logging.info(f"📡 [信号发送] 已同步 filelist.txt (带审计) 到 4C: {ts_dir.name}")
+    except Exception as e:
+        logging.error(f"❌ 同步 filelist.txt 失败: {e}")
+    # ================= 同步字幕 =================
+    try:
+        syncer.sync_subtitles()
+        logging.info("📡 触发字幕同步")
+    except Exception as e:
+        logging.error(f"❌ 字幕同步异常: {e}")
     
     # 写日志文件
     if error_logs or not result_success: # 如果有错误或结果失败，都写日志

@@ -303,3 +303,33 @@ BUCKET_ENABLE_AUTO_UPLOAD = True         # 启用自动上传
 
 # 上传过滤配置
 BUCKET_UPLOAD_MEMBER_FILTER = "AKB48 Team 8 Hashimoto Haruna"
+
+# ========================= 远程同步配置 =========================
+# 1. 读取 server.conf (同目录)
+SERVER_CONF_FILE = BASE_DIR / "4c24g_server.conf"
+def load_remote_server():
+    if SERVER_CONF_FILE.exists():
+        try:
+            with open(SERVER_CONF_FILE, 'r') as f:
+                lines = [l.strip() for l in f.readlines() if l.strip()]
+                if len(lines) >= 2: return lines[0], lines[1]
+        except: pass
+    return None, None
+
+REMOTE_IP, REMOTE_PORT = load_remote_server()
+REMOTE_VIDEO_DIR = "/mnt/video/data/incoming_ts/"
+
+# 2. 同步模式开关 (这里就是你要的判断逻辑源头)
+# "all"  = 同步所有人
+# "main" = 只同步主推 (MAIN_MEMBER_ID)
+# "off"  = 关闭同步
+SYNC_MODE = "main"
+
+# 3. 主推成员 ID (需与 extract_member_name_from_folder 解析出的格式一致)
+# 例如: 文件夹是 "AKB48 ... Hashimoto Haruna ...", 解析出来通常是 "hashimoto_haruna"
+MAIN_MEMBER_ID = "hashimoto_haruna"
+
+# === 4C 专用路径配置 ===
+INCOMING_DIR = Path("/mnt/video/data/incoming_ts")   # 3C 传过来的源
+PROCESSED_DIR = Path("/mnt/video/data/processed_ts") # 拉伸后的存放地
+OUTPUT_DIR = Path("/mnt/video/merged")               # 合并后的 MP4

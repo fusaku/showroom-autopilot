@@ -15,8 +15,11 @@ from datetime import datetime
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "shared"))
+from logger_config import setup_logger
+setup_logger()
 from typing import List, Dict, Optional, Tuple
 from config import *
+from sync_module import should_run_local_upload
 
 # ==================== 验证配置 ====================
 
@@ -312,6 +315,13 @@ class GitHubPagesPublisher:
     
     def process_video_file(self, video_file: Path) -> bool:
         """处理单个视频文件"""
+
+        # ========== 【修改】直接调用 sync_module 判断 ==========
+        if not should_run_local_upload(video_file):
+            logging.info(f"⏭️ [Git] 分流跳过: {video_file.name}")
+            return False
+        # ====================================================
+
         logging.info(f"处理视频: {video_file.name}")
         self.stats['processed_videos'] += 1
         
@@ -434,6 +444,13 @@ class GitHubPagesPublisher:
     def publish_all(self) -> bool:
         """发布所有已上传的视频"""
         logging.info("=== 开始GitHub Pages发布 ===")
+        
+        # ========== 在修改文件前先拉取最新代码 ==========
+        if ENABLE_GIT_AUTO_PUBLISH and GIT_PULL_BEFORE_PUSH:
+            logging.info("正在预先拉取远程更新，以防冲突...")
+            success, output = self.run_git_command(['git', 'pull', 'origin', GIT_REMOTE_BRANCH])
+            if not success:
+                logging.warning(f"预拉取失败 (将继续尝试本地处理): {output}")
         
         has_changes = self.process_recent_uploads()
         

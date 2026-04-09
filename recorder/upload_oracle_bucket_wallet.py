@@ -7,6 +7,7 @@ Oracle对象存储上传模块 (使用数据库Wallet认证)
 import oci
 import logging
 import sys
+import subprocess
 from pathlib import Path
 from datetime import datetime
 
@@ -106,6 +107,22 @@ class OracleBucketUploader:
             
             logging.info(f"✅ 上传成功: {video_path.name}")
             
+            # 上传对应的 .uploaded 标记文件
+            uploaded_marker = video_path.with_suffix('.mp4.uploaded')
+            if uploaded_marker.exists():
+                try:
+                    marker_object_name = f"{BUCKET_PREFIX}{uploaded_marker.name}"
+                    with open(uploaded_marker, 'rb') as marker_data:
+                        self.client.put_object(
+                            namespace_name=BUCKET_NAMESPACE,
+                            bucket_name=BUCKET_NAME,
+                            object_name=marker_object_name,
+                            put_object_body=marker_data
+                        )
+                    logging.info(f"✅ 已上传标记文件: {uploaded_marker.name}")
+                except Exception as e:
+                    logging.warning(f"⚠️  标记文件上传失败: {e}")
+
             # 创建上传标记
             if BUCKET_CREATE_UPLOAD_MARKER:
                 marker_file = video_path.parent / f"{video_path.stem}.uploaded_bucket"
@@ -114,11 +131,6 @@ class OracleBucketUploader:
                     f"Bucket: {BUCKET_NAMESPACE}/{BUCKET_NAME}\n"
                     f"Object: {object_name}\n"
                 )
-            
-            # 可选:删除本地文件
-            if BUCKET_DELETE_AFTER_UPLOAD:
-                video_path.unlink()
-                logging.info(f"🗑️  已删除本地文件: {video_path.name}")
             
             return True
             
@@ -142,18 +154,28 @@ class OracleBucketUploader:
                 logging.debug(f"⏭️  跳过(不匹配): {video_file.name}")
                 continue
             
-            # 检查是否已上传到YouTube (必须有 .uploaded 标记)
-            youtube_uploaded_marker = video_file.with_suffix('.mp4.uploaded')
-            if not youtube_uploaded_marker.exists():
-                logging.debug(f"⏭️  跳过(未上传YouTube): {video_file.name}")
-                continue
-            
             # 检查是否已上传
             uploaded_marker = video_file.parent / f"{video_file.stem}.uploaded_bucket"
             if uploaded_marker.exists():
                 logging.debug(f"⏭️  已上传,跳过: {video_file.name}")
                 continue
-            
+
+            is_high_quality = False
+            try:
+                # 快速检测分辨率高度
+                cmd = ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=height", "-of", "csv=p=0", str(video_file)]
+                height = int(subprocess.check_output(cmd).decode().strip())
+                if height > 720:
+                    is_high_quality = True
+            except Exception:
+                pass # 检测失败当作低画质处理，直接上传不等待
+
+            # 只有当：是高清视频(>720p) 且 没有YouTube上传标记 时，才跳过
+            youtube_marker = video_file.with_suffix('.mp4.uploaded')
+            if is_high_quality and not youtube_marker.exists():
+                logging.debug(f"⏭️  跳过(1080p+ 等待YouTube上传): {video_file.name}")
+                continue
+
             # 执行上传
             if self.upload_file(video_file):
                 success_count += 1

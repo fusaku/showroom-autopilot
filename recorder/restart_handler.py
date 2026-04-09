@@ -6,6 +6,7 @@ Showroom 录制状态监控服务
 
 import os
 import sys
+import hashlib
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "shared"))
@@ -232,6 +233,57 @@ def has_new_ts_files(started_at_unix: int) -> bool:
         logging.warning(f"录制停止: 最近的 .ts 文件 {latest_ts.name} (更新于 {time.ctime(latest_mtime)}) 太久，已 {time_since_last_write:.0f} 秒未更新，超过 {MAX_TS_INACTIVE_TIME} 秒")
         return False
 
+def is_ghost_recording(folder: Path) -> bool:
+    """
+    检测是否陷入 HLS 切片死循环（幽灵录制）。
+    结合局部哈希校验与特定的错误特征码(ZZZZZ)检测。
+    """
+    try:
+        # 获取最新的 3 个 .ts 文件
+        ts_files = sorted(folder.glob("*.ts"), key=lambda f: f.stat().st_mtime, reverse=True)
+        if len(ts_files) < 3:
+            return False  # 文件太少，可能是刚开播或刚下播的正常花絮，不干预
+
+        latest_files = ts_files[:3]
+        hashes = []
+
+        for file_path in latest_files:
+            # 策略 A：局部哈希对比 (避开文件头部的时间戳，只比对核心画面数据)
+            with open(file_path, "rb") as f:
+                # 跳过前 10KB，读取中间 100KB
+                f.seek(10240) 
+                chunk = f.read(102400) 
+                
+                if not chunk: 
+                    f.seek(0)
+                    chunk = f.read()
+                    
+                file_hash = hashlib.md5(chunk).hexdigest()
+                hashes.append(file_hash)
+
+        # 如果最新 3 个文件的核心数据块完全一样，说明陷入死循环
+        if len(set(hashes)) == 1:
+            logging.warning("检测到幽灵录制：最新 3 个 .ts 文件核心数据完全重复！")
+            return True
+        
+        # 策略 B：特征码检测 (针对 FFmpeg 无效流产生的 ZZZZZ 填充)
+        with open(latest_files[0], "rb") as f:
+            f.seek(0, 2)
+            file_size = f.tell()
+            seek_pos = max(0, file_size - 5000)
+            f.seek(seek_pos)
+            tail_data = f.read()
+            
+            if b'ZZZZZZZZZZZZZZZZZZZZ' in tail_data:
+                logging.warning("检测到幽灵录制：发现无效的 ZZZZZ 填充数据！")
+                return True
+
+        return False
+        
+    except Exception as e:
+        logging.error(f"执行幽灵录制检测时发生异常: {e}")
+        return False
+
 def restart_service(service_name):
     """重启服务"""
     global last_restart_time
@@ -281,7 +333,28 @@ def restart_loop():
             else:
                 logging.info("录制正常")
         else:
+            # 数据库显示未直播
             logging.debug(f"{MEMBER['id']} 当前未直播")
+            
+            # 寻找最新的录制目录
+            folder = get_latest_subfolder(TS_PARENT_DIR)
+            if folder:
+                try:
+                    ts_files = list(folder.glob("*.ts"))
+                    if ts_files:
+                        latest_ts = max(ts_files, key=lambda f: f.stat().st_mtime)
+                        time_since_last_write = time.time() - latest_ts.stat().st_mtime
+                        
+                        # 如果下播后，文件依然在频繁更新 (比如 2 分钟内有新写入)
+                        if time_since_last_write < 120: 
+                            if is_ghost_recording(folder):
+                                logging.critical("判定为无效的 HLS 死循环，执行重启以打断幽灵录制！")
+                                # 这里按照你的架构逻辑，用 restart 打断下载进程
+                                restart_service(SERVICE_NAME)
+                            else:
+                                logging.info("下播后仍有新数据且无异常，保留观察(可能是真正的下播花絮)...")
+                except Exception as e:
+                    logging.error(f"检查下播后状态时发生错误: {e}")
         
         time.sleep(RESTART_CHECK_INTERVAL)
 

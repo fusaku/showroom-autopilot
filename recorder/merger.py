@@ -275,7 +275,9 @@ def upload_if_needed(success_count):
             # 也就是自动写入到 /home/ubuntu/logs/live-merge-up.log
             subprocess.Popen(
                 command,
-                start_new_session=True 
+                start_new_session=True,
+                stdout=sys.stdout,
+                stderr=sys.stderr
             )
             
             logging.info("✅ 上传指令已发出，日志将自动追加到当前服务日志文件中。")

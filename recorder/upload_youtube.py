@@ -14,6 +14,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "shared"))
 from zoneinfo import ZoneInfo
+from logger_config import setup_logger
+setup_logger()
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
@@ -22,7 +24,8 @@ from googleapiclient.http import MediaFileUpload
 from github_pages_publisher import publish_to_github_pages
 from config import *
 from upload_oracle_bucket_wallet import upload_all_pending_to_bucket
-
+from sync_module import should_run_local_upload
+from cleanup import cleanup_video_resources
 
 # 全局变量
 LAST_QUOTA_EXHAUSTED_DATE = {
@@ -283,28 +286,20 @@ def mark_as_uploaded(file_path: Path, video_id: str):
 
 def handle_post_upload_actions(file_path: Path):
     """处理上传完成后的操作"""
+    # 仅当开启“上传后删除”时，执行深度清理
     if YOUTUBE_DELETE_AFTER_UPLOAD:
         try:
-            file_path.unlink()
-            logging.info(f"已删除本地文件: {file_path.name}")
+            logging.info(f"🗑️ [清理] 触发深度清理流程: {file_path.stem}")
+            # 传入不带后缀的文件名，删除所有相关碎片、MP4和标记文件
+            cleanup_video_resources(file_path.stem)
         except Exception as e:
-            logging.error(f"删除文件失败: {e}")
-    
-    elif YOUTUBE_MOVE_AFTER_UPLOAD:
-        try:
-            # 确保备份目录存在
-            YOUTUBE_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-            
-            backup_path = YOUTUBE_BACKUP_DIR / file_path.name
-            # 如果备份文件已存在，添加时间戳
-            if backup_path.exists():
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                backup_path = YOUTUBE_BACKUP_DIR / f"{file_path.stem}_{timestamp}{file_path.suffix}"
-            
-            shutil.move(str(file_path), str(backup_path))
-            logging.info(f"已移动文件到备份目录: {backup_path.name}")
-        except Exception as e:
-            logging.error(f"移动文件失败: {e}")
+            logging.error(f"❌ 深度清理失败: {e}")
+            # 兜底：如果深度清理脚本报错，至少尝试删除主文件
+            try:
+                if file_path.exists():
+                    file_path.unlink()
+            except:
+                pass
 
 def send_upload_notification(file_name: str, video_id: str, success: bool = True):
     """发送上传完成通知"""
@@ -687,6 +682,28 @@ def handle_merged_video(mp4_path: Path) -> bool:
         upload_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         save_upload_info(mp4_path, video_id, title, description, tags, upload_time)
         
+        # ========== 新增代码开始: 4C环境自动复制 .uploaded 文件 ==========
+        # 目标目录
+        summarizer_target_dir = Path("/home/ubuntu/akb48-summarizer/videos")
+        
+        if summarizer_target_dir.exists():
+            try:
+                # 1. 确定源文件路径 (即刚刚生成的 .uploaded 文件)
+                uploaded_file_path = mp4_path.with_suffix(mp4_path.suffix + ".uploaded")
+                
+                # 2. 确定目标路径
+                dest_path = summarizer_target_dir / uploaded_file_path.name
+                
+                # 3. 复制文件 (使用 copy2 保留文件时间戳等元数据)
+                if uploaded_file_path.exists():
+                    shutil.copy2(uploaded_file_path, dest_path)
+                    logging.info(f"📋 [Summarizer] 已复制 .uploaded 文件到: {dest_path}")
+                else:
+                    logging.warning(f"⚠️ 找不到源文件，跳过复制: {uploaded_file_path}")
+                    
+            except Exception as e:
+                logging.warning(f"⚠️ 复制 .uploaded 文件到 Summarizer 失败: {e}")
+        
         # 处理上传后操作
         handle_post_upload_actions(mp4_path)
         
@@ -703,6 +720,21 @@ def upload_all_pending_videos(directory: Path = None):
     Args:
         directory: 包含MP4文件的目录（None时使用配置的OUTPUT_DIR）
     """
+
+    # ========== 新增:Oracle对象存储上传 ==========
+    if BUCKET_ENABLE_AUTO_UPLOAD:
+        logging.info("🪣 检测到新上传，触发Oracle对象存储上传...")
+        try:
+            uploaded_count = upload_all_pending_to_bucket()
+            if uploaded_count > 0:
+                logging.info(f"✅ 对象存储上传完成: {uploaded_count} 个视频")
+            else:
+                logging.info("ℹ️  没有待上传到对象存储的视频")
+        except Exception as e:
+            logging.error(f"❌ 对象存储上传失败: {e}")
+            logging.debug(f"详细错误:\n{traceback.format_exc()}")
+    # =============================================
+
     if not ENABLE_AUTO_UPLOAD:
         logging.debug("自动上传功能已禁用")
         return
@@ -740,20 +772,6 @@ def _upload_all_pending_videos_internal(directory: Path):
             except Exception as e:
                 logging.error(f"GitHub Pages 同步失败: {e}")
 
-            # ========== 新增:Oracle对象存储上传 ==========
-            if BUCKET_ENABLE_AUTO_UPLOAD:
-                logging.info("🪣 检测到新上传，触发Oracle对象存储上传...")
-                try:
-                    uploaded_count = upload_all_pending_to_bucket()
-                    if uploaded_count > 0:
-                        logging.info(f"✅ 对象存储上传完成: {uploaded_count} 个视频")
-                    else:
-                        logging.info("ℹ️  没有待上传到对象存储的视频")
-                except Exception as e:
-                    logging.error(f"❌ 对象存储上传失败: {e}")
-                    logging.debug(f"详细错误:\n{traceback.format_exc()}")
-            # =============================================
-
     if not directory.exists():
         logging.warning(f"目录不存在: {directory}")
         return
@@ -785,13 +803,18 @@ def _upload_all_pending_videos_internal(directory: Path):
 
         # ========== 2. 扫描待上传文件 ==========
         mp4_files = sorted(directory.glob("*.mp4"))
-        pending_files = [f for f in mp4_files if not is_uploaded(f)]
+        # 【修改处】：在生成待处理列表时，直接过滤掉不属于本实例的文件
+        pending_files = [
+            f for f in mp4_files 
+            if not is_uploaded(f) and should_run_local_upload(f)
+        ]
 
+        # 如果过滤后没有本实例需要处理的文件，直接 break 跳出 while True 循环
         if not pending_files:
-            logging.info("✅ 扫描完成:没有待上传的视频")
+            logging.info("✅ 扫描完成: 没有属于本实例处理的待上传视频")
             break
 
-        logging.info(f"📦 找到 {len(pending_files)} 个待上传视频")
+        logging.info(f"📦 找到 {len(pending_files)} 个属于本实例处理的待上传视频")
         logging.info("-" * 50)
 
         # ========== 3. 逐个处理视频 ==========
