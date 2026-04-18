@@ -218,7 +218,7 @@ OUTBOUND_IPS = [
 
 # ========================= 3. 监控配置 =========================
 MAX_TS_INACTIVE_TIME = 120      # TS文件停止更新判定阈值
-GRACEFUL_START_DELAY = 6       # 启动缓冲
+GRACEFUL_START_DELAY = 35       # 启动缓冲
 FILE_CHECK_GRACE_PERIOD = 35    # smart-start 启动宽限期
 STOP_DELAY = 300               # 停止录制延迟
 

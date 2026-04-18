@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "shared"))
 from logger_config import setup_logger
 setup_logger()
 from config import * # 复用 OUTPUT_DIR, SUBTITLES_SOURCE_ROOT 等配置
-from upscaler import upscale_file  # 需确保 recorder/upscaler.py 存在
+from upscaler import get_frame_rate, upscale_file  # 需确保 recorder/upscaler.py 存在
 from merger import merge_once      # 复用现有的合并模块
 
 
@@ -121,7 +121,7 @@ def has_matching_subtitle_for_group(group_folders):
 
 # ========================= 4C 核心处理 =========================
 
-def process_live_folder_upscale(incoming_folder: Path, processed_folder: Path):
+def process_live_folder_upscale(incoming_folder: Path, processed_folder: Path, is_last: bool = False):
     """
     核心任务：将 Incoming (360p) 的文件拉伸到 Processed (1080p)
     """
@@ -129,49 +129,92 @@ def process_live_folder_upscale(incoming_folder: Path, processed_folder: Path):
         return
 
     processed_folder.mkdir(parents=True, exist_ok=True)
-    src_files = sorted(list(incoming_folder.glob("*.ts")))
-    
-    # 找出 Processed 目录缺失的文件
-    pending_files = []
-    for src in src_files:
-        dst = processed_folder / src.name
-        # 如果目标不存在或大小为0，则加入任务
-        if not dst.exists() or dst.stat().st_size == 0:
-            pending_files.append(src)
+    src_files = sorted(list(incoming_folder.glob("*.ts")),
+                       key=lambda f: [int(c) if c.isdigit() else c.lower()
+                                      for c in re.split(r'(\d+)', f.name)])
 
-    if not pending_files:
+    if not src_files:
         return
 
-    logging.info(f"⚡ [{incoming_folder.name}] 新增 {len(pending_files)} 个分片，开始拉伸...")
-    
-    # 串行执行拉伸 (ffmpeg 耗资源，不建议并行)
-    for src in pending_files:
-        dst = processed_folder / src.name
-        upscale_file(src, dst) # 调用 upscaler 模块
+    fps = get_frame_rate(src_files)
+
+    # 按序号断层切分成连续段
+    def get_ss_num(f):
+        m = re.search(r'ss-(\d+)', f.name)
+        return int(m.group(1)) if m else -1
+
+    # 切分连续段
+    segments = []
+    current_seg = [src_files[0]]
+    for i in range(1, len(src_files)):
+        prev_num = get_ss_num(src_files[i-1])
+        curr_num = get_ss_num(src_files[i])
+        if curr_num - prev_num == 1:
+            current_seg.append(src_files[i])
+        else:
+            segments.append(current_seg)
+            current_seg = [src_files[i]]
+    segments.append(current_seg)
+
+    # 每段最多500个，超过500再细分
+    chunks = []
+    for seg in segments:
+        for i in range(0, len(seg), 500):
+            chunks.append(seg[i:i+500])
+
+    for chunk in chunks:
+        # 不足500个且不是最后阶段，跳过
+        if len(chunk) < 500 and not is_last:
+            continue
+
+        first_num = get_ss_num(chunk[0])
+        last_num = get_ss_num(chunk[-1])
+        out_name = f"chunk_{first_num:06d}_{last_num:06d}.mp4"
+        dst = processed_folder / out_name
+
+        if dst.exists() and dst.stat().st_size > 0:
+            continue
+
+        tmp_list = processed_folder / f".tmp_{first_num}.txt"
+        with open(tmp_list, "w", encoding="utf-8") as f:
+            for ts in chunk:
+                f.write(f"file '{ts.resolve()}'\n")
+
+        logging.info(f"⚡ [{incoming_folder.name}] 拉伸分组 {out_name} ({len(chunk)}个分片)")
+        upscale_file(tmp_list, dst, fps=fps, is_filelist=True)
+        tmp_list.unlink(missing_ok=True)
+
+def get_ss_num_from_path(f):
+    m = re.search(r'ss-(\d+)', f.name)
+    return int(m.group(1)) if m else -1
 
 def check_group_ready_to_merge(group_folders):
-    """
-    判断条件：
-    1. 3C 信号：Incoming 文件夹内有 filelist.txt
-    2. 拉伸完成：Processed 文件数 >= Incoming 文件数
-    """
     for folder in group_folders:
-        # 1. 检查 3C 结束信号
-        signal_file = folder / FILELIST_NAME # filelist.txt
+        signal_file = folder / FILELIST_NAME
         if not signal_file.exists():
             return False, f"等待 3C 同步信号: {folder.name}"
 
-        # 2. 检查拉伸进度
         proc_folder = PROCESSED_DIR / folder.name
         if not proc_folder.exists():
-             return False, f"等待创建拉伸目录: {proc_folder.name}"
-             
-        src_count = len(list(folder.glob("*.ts")))
-        dst_count = len(list(proc_folder.glob("*.ts")))
-        
-        if dst_count < src_count:
-            return False, f"拉伸进行中: {dst_count}/{src_count}"
-            
+            return False, f"等待创建拉伸目录: {proc_folder.name}"
+
+        src_files = sorted(list(folder.glob("*.ts")),
+                           key=lambda f: [int(c) if c.isdigit() else c.lower()
+                                          for c in re.split(r'(\d+)', f.name)])
+        if not src_files:
+            continue
+
+        last_ts = src_files[-1]
+        processed_mp4s = list(proc_folder.glob("chunk_*.mp4"))
+        if not processed_mp4s:
+            return False, f"拉伸进行中: 0个chunk完成"
+
+        last_ts_num = get_ss_num_from_path(last_ts)
+        last_chunk_done = any(f"{last_ts_num:06d}" in mp4.name for mp4 in processed_mp4s)
+
+        if not last_chunk_done:
+            return False, f"拉伸进行中: 最后chunk未完成"
+
     return True, "Ready"
 
 def finalize_upscale_group(group_folders):
@@ -186,7 +229,7 @@ def finalize_upscale_group(group_folders):
         if not processed_dir.exists(): continue
 
         # 生成 filelist.txt (merger 模块依赖这个)
-        ts_files = sorted(list(processed_dir.glob("*.ts")), key=lambda f: [int(c) if c.isdigit() else c.lower() for c in re.split(r'(\d+)', f.name)])
+        ts_files = sorted(list(processed_dir.glob("chunk_*.mp4")), key=lambda f: [int(c) if c.isdigit() else c.lower() for c in re.split(r'(\d+)', f.name)])
         filelist_txt = processed_dir / FILELIST_NAME # 使用 config 定义的文件名
         
         with open(filelist_txt, "w", encoding="utf-8") as f:
@@ -270,7 +313,8 @@ def main_loop():
                 # === 步骤 A: 拉伸 (Incoming -> Processed) ===
                 for folder in group_folders:
                     proc_folder = PROCESSED_DIR / folder.name
-                    process_live_folder_upscale(folder, proc_folder)
+                    is_last = (folder / FILELIST_NAME).exists()
+                    process_live_folder_upscale(folder, proc_folder, is_last=is_last)
 
                 # === 步骤 B: 检查合并条件 ===
                 is_ready, status_msg = check_group_ready_to_merge(group_folders)
