@@ -4,6 +4,7 @@ import subprocess
 import logging
 import os
 from pathlib import Path
+import time
 
 def get_frame_rate(input_paths) -> str:
     if isinstance(input_paths, Path):
@@ -41,61 +42,80 @@ def get_frame_rate(input_paths) -> str:
 def upscale_file(input_path: Path, output_path: Path, fps: str = "40", is_filelist: bool = False) -> bool:
     """
     调用 ffmpeg 将输入文件拉伸到 1080p
-    安全策略：先输出到 .temp 文件，成功后再重命名。
+    加强版：带中间过程日志与稳定性预处理
     """
     if output_path.exists() and output_path.stat().st_size > 0:
         return True
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # 定义临时文件
     temp_output_path = output_path.with_suffix(".temp")
-
-    if temp_output_path.exists():
-        try:
-            temp_output_path.unlink()
-        except Exception:
-            pass
-    if is_filelist:
-        input_args = ["-f", "concat", "-safe", "0", "-i", str(input_path)]
-    else:
-        input_args = ["-i", str(input_path)]
-    cmd = [
-        "nice", "-n", "15",
-        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-        *input_args,
-        "-c:v", "libx264",
-        "-preset", "ultrafast",
-        "-crf", "18",
-        "-c:a", "copy",
-        "-vf", f"scale=1920:1080:flags=lanczos,fps={fps}",
-        "-vsync", "cfr",
-        "-f", "mp4",
-        str(temp_output_path)
-    ]
+    
+    temp_combined_path = None
+    actual_input = input_path
 
     try:
-        logging.debug(f"🔥 开始拉伸: {input_path.name}")
+        # --- 步骤 1: 预处理 (仅针对 TS 列表) ---
+        if is_filelist:
+            temp_combined_path = output_path.parent / f"pre_merge_{int(time.time())}.mp4"
+            logging.info(f"🔄 [1/2 预处理] 正在合并片段以稳定时间轴: {input_path.name}")
+            
+            merge_cmd = [
+                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                "-f", "concat", "-safe", "0", "-i", str(input_path),
+                "-c", "copy", "-movflags", "+faststart", 
+                str(temp_combined_path)
+            ]
+            
+            start_merge = time.time()
+            subprocess.run(merge_cmd, check=True, timeout=300)
+            logging.info(f"✅ [1/2 预处理] 合并成功，耗时 {time.time() - start_merge:.2f}s")
+            actual_input = temp_combined_path
+
+        # --- 步骤 2: 正式拉伸 ---
+        if temp_output_path.exists():
+            temp_output_path.unlink()
+
+        logging.info(f"🔥 [2/2 拉伸中] 正在进行 1080p 编码: {output_path.name}")
         
+        cmd = [
+            "nice", "-n", "15",
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-fflags", "+genpts", # 强制重新生成时间戳，双保险
+            "-i", str(actual_input),
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-crf", "18",
+            "-c:a", "copy",
+            "-vf", f"scale=1920:1080:flags=lanczos,fps={fps}",
+            "-vsync", "cfr",
+            "-f", "mp4",
+            str(temp_output_path)
+        ]
+
+        start_upscale = time.time()
         subprocess.run(cmd, check=True, timeout=600) 
         
         # 原子重命名
         os.rename(temp_output_path, output_path)
-        
-        # logging.debug(f"✅ 拉伸完成: {output_path.name}")
+        logging.info(f"✨ [任务完成] 成功产出: {output_path.name}，编码耗时 {time.time() - start_upscale:.2f}s")
         return True
 
-    except subprocess.TimeoutExpired:
-        logging.error(f"❌ 拉伸超时: {input_path.name}")
-        if temp_output_path.exists(): temp_output_path.unlink()
-        return False
-        
     except subprocess.CalledProcessError as e:
-        logging.error(f"❌ 拉伸失败: {input_path.name} - {e}")
+        # 捕捉 FFmpeg 报错日志
+        logging.error(f"❌ [FFmpeg 报错] 任务 {input_path.name} 失败。返回码: {e.returncode}")
         if temp_output_path.exists(): temp_output_path.unlink()
         return False
         
     except Exception as e:
-        logging.error(f"❌ 未知错误: {e}")
+        logging.error(f"❌ [未知错误] {str(e)}")
         if temp_output_path.exists(): temp_output_path.unlink()
         return False
+        
+    finally:
+        # --- 步骤 3: 清理 ---
+        if temp_combined_path and temp_combined_path.exists():
+            try:
+                temp_combined_path.unlink()
+                logging.debug(f"🧹 已清理临时中间文件")
+            except Exception as e:
+                logging.warning(f"⚠️ 清理临时文件失败: {e}")
