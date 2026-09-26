@@ -27,13 +27,18 @@ def delete_path(path: Path):
         logging.error(f"❌ 删除失败 {path}: {e}")
 
 def extract_search_pattern(filename_stem: str):
-    """从文件名中提取核心搜索关键字"""
+    """
+    【中文备注 - 安全修复】
+    从文件名中提取核心搜索关键字。
+    若正则匹配失败返回 None，严禁返回通配符 '*'，
+    防止引发对根目录下所有子目录的误匹配与误删。
+    """
     match = re.search(r' - (.*?) \d{6}$', filename_stem)
     if match:
         member_signature = match.group(1).strip()
         return f"*{member_signature}*"
-    logging.warning(f"⚠️ 无法提取成员签名: {filename_stem}")
-    return "*"
+    logging.warning(f"⚠️ 无法提取成员签名: {filename_stem}，安全中止以防误删")
+    return None
 
 def find_and_delete_incoming_fragments(target_mp4_name: str, search_root: Path):
     """
@@ -43,6 +48,11 @@ def find_and_delete_incoming_fragments(target_mp4_name: str, search_root: Path):
     """
     stem = target_mp4_name.replace(OUTPUT_EXTENSION, "")
     pattern = extract_search_pattern(stem)
+    # 【中文备注】如果无法精确提取成员标识，直接跳过本次清理，保证安全
+    if not pattern:
+        logging.warning(f"⏭️ [安全跳过] 无法获取成员匹配模式，跳过原始切片清理: {target_mp4_name}")
+        return
+
     candidates = search_root.glob(pattern)
 
     # 检查全局完成标记
@@ -65,6 +75,11 @@ def find_and_delete_processed_fragments(target_mp4_name: str, search_root: Path)
     """针对 processed_ts 的逻辑：依然依赖 .merged 标记进行精准确认"""
     stem = target_mp4_name.replace(OUTPUT_EXTENSION, "")
     pattern = extract_search_pattern(stem)
+    # 【中文备注】如果无法精确提取成员标识，直接跳过本次清理，保证安全
+    if not pattern:
+        logging.warning(f"⏭️ [安全跳过] 无法获取成员匹配模式，跳过拉伸切片清理: {target_mp4_name}")
+        return
+
     candidates = search_root.glob(pattern)
 
     for folder in candidates:

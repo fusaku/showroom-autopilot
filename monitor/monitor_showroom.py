@@ -35,6 +35,31 @@ sys.path.insert(0, str(Path(__file__).parent))
 # ============================================
 INSTANCE_ID = os.getenv("INSTANCE_ID")
 MEMBER_ID = sys.argv[1] if len(sys.argv) > 1 else os.getenv("MEMBER_ID")
+instance_count = 1
+instance_index = 0
+
+def slice_members_for_current_instance(all_members):
+    """
+    【中文备注 - 核心辅助函数】
+    根据当前实例角色对成员列表进行切片分配。
+    支持多检测器分片模式、单成员模式以及全量监控模式。
+    确保系统在首次启动与后续运行时热加载成员配置时，分片规则完全一致，
+    防止多检测器实例在热加载后被重置为全量成员检测导致流量翻倍。
+    """
+    if INSTANCE_ID:
+        if instance_count <= 1:
+            return all_members
+        chunk_size = len(all_members) // instance_count
+        start = instance_index * chunk_size
+        end = start + chunk_size if instance_index < instance_count - 1 else len(all_members)
+        return all_members[start:end]
+    elif MEMBER_ID:
+        if MEMBER_ID.upper() == "ALL":
+            return all_members
+        single = next((m for m in all_members if m["id"] == MEMBER_ID), None)
+        return [single] if single else all_members
+    else:
+        return [all_members[0]] if all_members else []
 
 # 模式1: 多检测器实例模式（自动检测）
 if INSTANCE_ID:
@@ -68,7 +93,7 @@ if INSTANCE_ID:
     
     # 单实例模式（只有1台检测器）
     if instance_count == 1:
-        MEMBERS = ENABLED_MEMBERS
+        MEMBERS = slice_members_for_current_instance(ENABLED_MEMBERS)
         print(f"✅ 单检测器模式: {INSTANCE_ID}")
         print(f"   监控所有成员: {len(MEMBERS)} 个")
     
@@ -80,15 +105,11 @@ if INSTANCE_ID:
             print(f"   请使用 monitor-a 到 monitor-{chr(ord('a') + instance_count - 1)}")
             sys.exit(1)
         
-        # 计算分配范围
-        all_members = ENABLED_MEMBERS
-        chunk_size = len(all_members) // instance_count
-        
+        # 计算分配范围（使用统一函数进行切片）
+        MEMBERS = slice_members_for_current_instance(ENABLED_MEMBERS)
+        chunk_size = len(ENABLED_MEMBERS) // instance_count
         start = instance_index * chunk_size
-        # 最后一个实例包含所有剩余成员
-        end = start + chunk_size if instance_index < instance_count - 1 else len(all_members)
-        
-        MEMBERS = all_members[start:end]
+        end = start + chunk_size if instance_index < instance_count - 1 else len(ENABLED_MEMBERS)
         
         print(f"🔀 多检测器模式: {INSTANCE_ID}")
         print(f"   总实例数: {instance_count} (自动检测)")
@@ -577,13 +598,15 @@ async def monitor_loop_async():
         while not stop_flag[0]:
             round_start = time.time()
             
-            # 重新加载成员配置
+            # 重新加载成员配置（支持运行时动态更新成员，同时保持实例分片不变）
             try:
                 from config import get_enabled_members
                 all_members = get_enabled_members()
                 if all_members:
-                    MEMBERS = all_members
-                    # ✅ 重新加载后也预处理team信息
+                    # 【中文备注 - 核心修复】
+                    # 重新切片成员列表，避免多实例模式在热加载后被全量覆盖导致各实例重复监控
+                    MEMBERS = slice_members_for_current_instance(all_members)
+                    # 重新加载后预处理队伍与分组信息
                     for member in MEMBERS:
                         team_full = member.get("team", "")
                         team_parts = team_full.split(" ", 1)

@@ -418,48 +418,40 @@ global_deduplicator = TSDeduplicator()
 # ========================= 文件检查和处理 =========================
 
 def check_ts_file(ts_file: Path):
-    """检测ts文件是否含视频和音频流"""
-    # 构建FFprobe命令，使用配置的参数
-    base_cmd = ["ffprobe"]
-    
-    # 添加隐藏banner选项
+    """
+    【中文备注 - 性能优化】
+    检测 TS 文件是否同时包含视频流和音频流。
+    原逻辑对每个 TS 文件分别启动两次独立的 ffprobe 进程（分别检测视频与音频），
+    现优化为：仅调用一次 ffprobe，同时提取所有流的 codec_type。
+    在保证原有检测结果与异常处理 100% 完全一致的前提下，
+    将 3C 录制服务器上的 ffprobe 探针进程创建数量直接减半（-50%），
+    大幅降低系统 CPU 占用与频繁 fork/exec 产生的上下文切换开销。
+    """
+    cmd = ["ffprobe"]
     if FFMPEG_HIDE_BANNER:
-        base_cmd.append("-hide_banner")
-    
-    # 添加日志级别
-    base_cmd.extend(["-v", FFMPEG_LOGLEVEL])
-    
-    v_cmd = base_cmd + [
-        "-select_streams", "v",
-        "-show_entries", "stream=index",
+        cmd.append("-hide_banner")
+    cmd.extend(["-v", FFMPEG_LOGLEVEL])
+    cmd.extend([
+        "-show_entries", "stream=codec_type",
         "-of", "csv=p=0",
         str(ts_file)
-    ]
-    a_cmd = base_cmd + [
-        "-select_streams", "a",
-        "-show_entries", "stream=index",
-        "-of", "csv=p=0",
-        str(ts_file)
-    ]
+    ])
     
     try:
-        video_stream = subprocess.run(
-            v_cmd, 
+        result = subprocess.run(
+            cmd, 
             stdout=subprocess.PIPE, 
             stderr=subprocess.PIPE, 
             text=True, 
             timeout=FFPROBE_TIMEOUT
-        ).stdout.strip()
+        )
         
-        audio_stream = subprocess.run(
-            a_cmd, 
-            stdout=subprocess.PIPE, 
-            stderr=subprocess.PIPE, 
-            text=True, 
-            timeout=FFPROBE_TIMEOUT
-        ).stdout.strip()
+        # 提取流类型集合（正常 TS 切片输出包含 'video' 和 'audio'）
+        stream_types = set(result.stdout.strip().split())
+        has_video = "video" in stream_types
+        has_audio = "audio" in stream_types
         
-        if video_stream and audio_stream:
+        if has_video and has_audio:
             return ts_file, None
         else:
             msg = f"[不同步或缺流] {ts_file.name}"

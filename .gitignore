@@ -1,1 +1,28 @@
+# 历史遗留忽略
 State-detection/db_credentials.key
+
+# 本次优化备份目录
+.backup_before_optimization/
+
+# 敏感凭据与服务器配置（防止误提交未跟踪的机密）
+shared/4c24g_server.conf
+shared/bucket_credentials.key
+shared/credentials/48g-SR/
+shared/credentials/idol-SR/
+
+# Python 运行时字节码与环境
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# 运行时锁文件与状态标记
+*.lock
+.locks/
+
+# 系统与 IDE 缓存文件
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

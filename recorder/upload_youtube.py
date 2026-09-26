@@ -1,6 +1,5 @@
 import pickle
 import time
-import fcntl
 import os
 import shutil
 import json
@@ -23,6 +22,7 @@ from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 from github_pages_publisher import publish_to_github_pages
 from config import *
+from file_lock import FileLock
 from upload_oracle_bucket_wallet import upload_all_pending_to_bucket
 from sync_module import should_run_local_upload
 from cleanup import cleanup_video_resources
@@ -39,46 +39,7 @@ MAX_RETRIES = 5  # 最大重试次数
 UPLOAD_DELAY = 60 # 每次重试等待时间（秒）
 CHUNK_TIMEOUT_SECONDS = 30 # 30秒
 
-class FileLock:
-    """文件锁类，防止多个进程同时处理同一个文件"""
-    
-    def __init__(self, lock_file_path: Path, timeout: int = 300):
-        self.lock_file_path = lock_file_path
-        self.timeout = timeout
-        self.lock_file = None
-        
-    def __enter__(self):
-        """获取锁"""
-        # 确保锁目录存在
-        self.lock_file_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        try:
-            self.lock_file = open(self.lock_file_path, 'w')
-            # 尝试获取排他锁
-            fcntl.flock(self.lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            # 写入进程信息
-            self.lock_file.write(f"PID: {os.getpid()}\nTime: {time.time()}\n")
-            self.lock_file.flush()
-            return self
-        except (OSError, IOError):
-            if self.lock_file:
-                self.lock_file.close()
-            return None
-    
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """释放锁"""
-        if self.lock_file:
-            try:
-                fcntl.flock(self.lock_file.fileno(), fcntl.LOCK_UN)
-                self.lock_file.close()
-                # 删除锁文件
-                if self.lock_file_path.exists():
-                    self.lock_file_path.unlink()
-            except:
-                pass
 
-
-import re
 
 def convert_title_to_japanese(title: str) -> str:
     """
@@ -146,17 +107,17 @@ def get_next_retry_time_japan():
     next_reset_in_japan = next_reset_pacific.astimezone(JST)
     return next_reset_in_japan.strftime("%Y-%m-%d %H:%M:%S")
 
-def get_authenticated_service():
-    """获取已认证的YouTube服务对象"""
+def _get_authenticated_service(token_path, client_secret_path, account_label="", *, create_token_dir=False):
+    """共用认证流程；账号入口负责传入路径、日志名称和目录创建策略。"""
     creds = None
     
     # 加载已保存的凭据
-    if YOUTUBE_TOKEN_PATH.exists():
+    if token_path.exists():
         try:
-            with open(YOUTUBE_TOKEN_PATH, "rb") as token_file:
+            with open(token_path, "rb") as token_file:
                 creds = pickle.load(token_file)
         except Exception as e:
-            logging.error(f"加载token失败: {e}")
+            logging.error(f"加载{account_label}token失败: {e}")
             creds = None
 
     # 检查凭据是否有效
@@ -165,111 +126,51 @@ def get_authenticated_service():
             try:
                 creds.refresh(Request())
             except Exception as e:
-                logging.error(f"刷新token失败: {e}")
+                logging.error(f"刷新{account_label}token失败: {e}")
                 creds = None
         
         # 如果凭据无效，重新认证
         if not creds:
-            if not YOUTUBE_CLIENT_SECRET_PATH.exists():
-                raise FileNotFoundError(f"客户端密钥文件不存在: {YOUTUBE_CLIENT_SECRET_PATH}")
+            if not client_secret_path.exists():
+                raise FileNotFoundError(f"{account_label}客户端密钥文件不存在: {client_secret_path}")
             
             flow = InstalledAppFlow.from_client_secrets_file(
-                str(YOUTUBE_CLIENT_SECRET_PATH), YOUTUBE_SCOPES
+                str(client_secret_path), YOUTUBE_SCOPES
             )
             creds = flow.run_local_server(port=0)
 
         # 保存凭据
         try:
-            with open(YOUTUBE_TOKEN_PATH, "wb") as token_file:
+            if create_token_dir:
+                token_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(token_path, "wb") as token_file:
                 pickle.dump(creds, token_file)
         except Exception as e:
-            logging.error(f"保存token失败: {e}")
+            logging.error(f"保存{account_label}token失败: {e}")
 
     return build("youtube", "v3", credentials=creds)
+
+
+def get_authenticated_service():
+    """获取已认证的YouTube服务对象"""
+    return _get_authenticated_service(YOUTUBE_TOKEN_PATH, YOUTUBE_CLIENT_SECRET_PATH)
+
 
 def get_authenticated_service_alt():
     """获取副账号的已认证YouTube服务对象"""
-    creds = None
-    
-    # 加载已保存的凭据
-    if YOUTUBE_TOKEN_PATH_ALT.exists():
-        try:
-            with open(YOUTUBE_TOKEN_PATH_ALT, "rb") as token_file:
-                creds = pickle.load(token_file)
-        except Exception as e:
-            logging.error(f"加载副账号token失败: {e}")
-            creds = None
+    return _get_authenticated_service(
+        YOUTUBE_TOKEN_PATH_ALT, YOUTUBE_CLIENT_SECRET_PATH_ALT,
+        "副账号", create_token_dir=True,
+    )
 
-    # 检查凭据是否有效
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            try:
-                creds.refresh(Request())
-            except Exception as e:
-                logging.error(f"刷新副账号token失败: {e}")
-                creds = None
-        
-        # 如果凭据无效,重新认证
-        if not creds:
-            if not YOUTUBE_CLIENT_SECRET_PATH_ALT.exists():
-                raise FileNotFoundError(f"副账号客户端密钥文件不存在: {YOUTUBE_CLIENT_SECRET_PATH_ALT}")
-            
-            flow = InstalledAppFlow.from_client_secrets_file(
-                str(YOUTUBE_CLIENT_SECRET_PATH_ALT), YOUTUBE_SCOPES
-            )
-            creds = flow.run_local_server(port=0)
-
-        # 保存凭据
-        try:
-            YOUTUBE_TOKEN_PATH_ALT.parent.mkdir(parents=True, exist_ok=True)
-            with open(YOUTUBE_TOKEN_PATH_ALT, "wb") as token_file:
-                pickle.dump(creds, token_file)
-        except Exception as e:
-            logging.error(f"保存副账号token失败: {e}")
-
-    return build("youtube", "v3", credentials=creds)
 
 def get_authenticated_service_third():
     """获取第三个账号的已认证YouTube服务对象"""
-    creds = None
-    
-    # 加载已保存的凭据
-    if YOUTUBE_TOKEN_PATH_THIRD.exists():
-        try:
-            with open(YOUTUBE_TOKEN_PATH_THIRD, "rb") as token_file:
-                creds = pickle.load(token_file)
-        except Exception as e:
-            logging.error(f"加载第三个账号token失败: {e}")
-            creds = None
+    return _get_authenticated_service(
+        YOUTUBE_TOKEN_PATH_THIRD, YOUTUBE_CLIENT_SECRET_PATH_THIRD,
+        "第三个账号", create_token_dir=True,
+    )
 
-    # 检查凭据是否有效
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            try:
-                creds.refresh(Request())
-            except Exception as e:
-                logging.error(f"刷新第三个账号token失败: {e}")
-                creds = None
-        
-        # 如果凭据无效,重新认证
-        if not creds:
-            if not YOUTUBE_CLIENT_SECRET_PATH_THIRD.exists():
-                raise FileNotFoundError(f"第三个账号客户端密钥文件不存在: {YOUTUBE_CLIENT_SECRET_PATH_THIRD}")
-            
-            flow = InstalledAppFlow.from_client_secrets_file(
-                str(YOUTUBE_CLIENT_SECRET_PATH_THIRD), YOUTUBE_SCOPES
-            )
-            creds = flow.run_local_server(port=0)
-
-        # 保存凭据
-        try:
-            YOUTUBE_TOKEN_PATH_THIRD.parent.mkdir(parents=True, exist_ok=True)
-            with open(YOUTUBE_TOKEN_PATH_THIRD, "wb") as token_file:
-                pickle.dump(creds, token_file)
-        except Exception as e:
-            logging.error(f"保存第三个账号token失败: {e}")
-
-    return build("youtube", "v3", credentials=creds)
 
 def is_uploaded(file_path: Path) -> bool:
     """检查文件是否已上传"""
