@@ -179,8 +179,15 @@ def merge_item(item: dict) -> bool:
             logging.info(f"{name} 合并完成")
             # --- 修改部分：统一为所有相关的原始文件夹添加标记 ---
             timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+            is_partial = item.get('is_partial', False)
             for folder in item['folders']:  # 无论 single 还是 merged，folders 列表里都有目标文件夹
-                marker_file = folder / ".merged"
+                # 分卷安全保护：如果是中途分卷（is_partial=True），打分卷标记 .merged_partX，
+                # 严禁打总的 .merged 标记，防止阻断录制器在同一文件夹继续录制后半段。
+                part_match = re.search(r'\(Part\s+(\d+)\)', name)
+                if is_partial and part_match:
+                    marker_file = folder / f".merged_part{part_match.group(1)}"
+                else:
+                    marker_file = folder / ".merged"
                 try:
                     marker_content = (
                         f"Status: Success\n"
@@ -188,7 +195,7 @@ def merge_item(item: dict) -> bool:
                         f"Output File: {name}{OUTPUT_EXTENSION}\n"
                     )
                     marker_file.write_text(marker_content, encoding='utf-8')
-                    logging.debug(f"已为文件夹 {folder.name} 添加合并标记")
+                    logging.debug(f"已为文件夹 {folder.name} 添加合并标记: {marker_file.name}")
                 except Exception as e:
                     logging.error(f"无法为 {folder.name} 创建标记文件: {e}")
             return True
@@ -248,14 +255,18 @@ def upload_if_needed(success_count):
         except Exception as e:
             logging.error(f"🚨 [启动上传失败]: {e}")
 
-def merge_once(target_folders=None):  # 改成复数
+def merge_once(target_folders=None, custom_item=None):
     """执行一次合并操作
     
     Args:
         target_folders: 指定要合并的文件夹列表(属于同一个直播)
+        custom_item: 直接传入准备好的合并项目字典（支持分卷合并）
     """
-    
-    if target_folders:
+    if custom_item:
+        success = merge_item(custom_item)
+        upload_if_needed(1 if success else 0)
+        return success
+    elif target_folders:
         # 只处理指定的文件夹组
         folders_to_merge = target_folders
         

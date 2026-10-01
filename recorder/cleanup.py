@@ -3,6 +3,7 @@ import logging
 import sys
 import re
 import os
+import time
 from pathlib import Path
 
 # 路径设置：引用 shared 配置
@@ -26,14 +27,25 @@ def delete_path(path: Path):
     except Exception as e:
         logging.error(f"❌ 删除失败 {path}: {e}")
 
+def is_folder_actively_writing(folder: Path, threshold_seconds: int = 300) -> bool:
+    """检查文件夹在指定秒数内是否仍有写入活跃，防止录制中途误删"""
+    try:
+        ts_files = list(folder.glob("*.ts"))
+        if not ts_files:
+            return False
+        latest_mtime = max(f.stat().st_mtime for f in ts_files)
+        return (time.time() - latest_mtime) < threshold_seconds
+    except Exception:
+        return False
+
 def extract_search_pattern(filename_stem: str):
     """
     【中文备注 - 安全修复】
-    从文件名中提取核心搜索关键字。
+    从文件名中提取核心搜索关键字（支持分卷后缀如 (Part 1)）。
     若正则匹配失败返回 None，严禁返回通配符 '*'，
     防止引发对根目录下所有子目录的误匹配与误删。
     """
-    match = re.search(r' - (.*?) \d{6}$', filename_stem)
+    match = re.search(r' - (.*?) \d{6}(?:\s*\(Part\s*\d+\))?$', filename_stem)
     if match:
         member_signature = match.group(1).strip()
         return f"*{member_signature}*"
@@ -45,6 +57,7 @@ def find_and_delete_incoming_fragments(target_mp4_name: str, search_root: Path):
     针对 incoming_ts 的安全清理逻辑：
     1. 必须在 MERGED_DIR 发现成品标记 (.uploaded 或 .merged)
     2. 碎片目录内必须存在 filelist.txt (证明合并流程已启动并读取过该目录)
+    3. 碎片目录在过去 5 分钟内不得有新写入（防止分段合并后正在录制下一段时被误删）
     """
     stem = target_mp4_name.replace(OUTPUT_EXTENSION, "")
     pattern = extract_search_pattern(stem)
@@ -66,6 +79,11 @@ def find_and_delete_incoming_fragments(target_mp4_name: str, search_root: Path):
     for folder in candidates:
         if not folder.is_dir(): continue
         
+        # 保护锁：如果文件夹最近还在写切片，严禁删除
+        if is_folder_actively_writing(folder, 300):
+            logging.info(f"⏭️ [保护跳过] 文件夹 {folder.name} 最近仍有写入活跃，可能处于录制中，跳过清理")
+            continue
+
         # 你的核心判断：是否存在 filelist.txt
         if (folder / "filelist.txt").exists():
             logging.info(f"✅ [确认] 发现 filelist.txt 且成品已就绪，删除原始碎片: {folder.name}")

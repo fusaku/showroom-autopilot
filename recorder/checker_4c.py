@@ -121,7 +121,35 @@ def has_matching_subtitle_for_group(group_folders):
 
 # ========================= 4C 核心处理 =========================
 
-def process_live_folder_upscale(incoming_folder: Path, processed_folder: Path, is_last: bool = False):
+def get_ss_num_from_path(f):
+    m = re.search(r'ss-(\d+)', f.name)
+    return int(m.group(1)) if m else -1
+
+def get_chunk_range(mp4_path: Path):
+    """从 chunk_000000_000499.mp4 提取起止序号"""
+    m = re.search(r'chunk_(\d+)_(\d+)\.mp4', mp4_path.name)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    return -1, -1
+
+def parse_filelist_txt(filelist_path: Path):
+    """从 filelist_partX.txt 或 filelist.txt 读取所有 .ts 文件路径并统一映射为 4C 本地路径"""
+    ts_files = []
+    if not filelist_path.exists():
+        return ts_files
+    folder = filelist_path.parent
+    try:
+        with open(filelist_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("file '") and line.endswith("'"):
+                    fname = Path(line[6:-1]).name
+                    ts_files.append(folder / fname)
+    except Exception as e:
+        logging.error(f"读取清单失败 {filelist_path}: {e}")
+    return ts_files
+
+def process_live_folder_upscale(incoming_folder: Path, processed_folder: Path, is_last: bool = False, src_files: list = None):
     """
     核心任务：将 Incoming (360p) 的文件拉伸到 Processed (1080p)
     """
@@ -129,9 +157,10 @@ def process_live_folder_upscale(incoming_folder: Path, processed_folder: Path, i
         return
 
     processed_folder.mkdir(parents=True, exist_ok=True)
-    src_files = sorted(list(incoming_folder.glob("*.ts")),
-                       key=lambda f: [int(c) if c.isdigit() else c.lower()
-                                      for c in re.split(r'(\d+)', f.name)])
+    if src_files is None:
+        src_files = sorted(list(incoming_folder.glob("*.ts")),
+                           key=lambda f: [int(c) if c.isdigit() else c.lower()
+                                          for c in re.split(r'(\d+)', f.name)])
 
     if not src_files:
         return
@@ -163,8 +192,17 @@ def process_live_folder_upscale(incoming_folder: Path, processed_folder: Path, i
             chunks.append(seg[i:i+500])
 
     for chunk in chunks:
-        # 不足500个且不是最后阶段，跳过
-        if len(chunk) < 500 and not is_last:
+        chunk_last_num = get_ss_num(chunk[-1])
+        is_chunk_sealed = is_last
+        if not is_chunk_sealed:
+            for pf in incoming_folder.glob("filelist_part*.txt"):
+                part_ts = parse_filelist_txt(pf)
+                if part_ts and get_ss_num_from_path(part_ts[-1]) >= chunk_last_num:
+                    is_chunk_sealed = True
+                    break
+
+        # 不足500个且不是最后阶段或未封包，跳过
+        if len(chunk) < 500 and not is_chunk_sealed:
             continue
 
         first_num = get_ss_num(chunk[0])
@@ -248,6 +286,21 @@ def merge_worker():
         try:
             task = merge_queue.get()
             if task is None: break
+
+            if isinstance(task, dict):
+                # 自定义分卷合并任务
+                item = task
+                task_name = item.get('name', 'unknown')
+                try:
+                    logging.info(f"🔄 [合并队列] 启动自定义/分卷合并: {task_name}")
+                    merge_once(custom_item=item)
+                    logging.info(f"✅ [合并队列] 完成: {task_name}")
+                except Exception as e:
+                    logging.error(f"❌ [合并队列] 失败 {task_name}: {e}")
+                    logging.error(traceback.format_exc())
+                finally:
+                    merge_queue.task_done()
+                continue
             
             group_key, processed_group_folders = task
             
@@ -313,8 +366,90 @@ def main_loop():
                 # === 步骤 A: 拉伸 (Incoming -> Processed) ===
                 for folder in group_folders:
                     proc_folder = PROCESSED_DIR / folder.name
-                    is_last = (folder / FILELIST_NAME).exists()
-                    process_live_folder_upscale(folder, proc_folder, is_last=is_last)
+                    part_files = sorted(list(folder.glob("filelist_part*.txt")),
+                                       key=lambda f: [int(c) if c.isdigit() else c.lower() for c in re.split(r'(\d+)', f.name)])
+                    if part_files:
+                        all_part_ts = set()
+                        for pf in part_files:
+                            pts = parse_filelist_txt(pf)
+                            if pts:
+                                all_part_ts.update(pts)
+                                process_live_folder_upscale(folder, proc_folder, is_last=True, src_files=pts)
+                        
+                        all_ts = sorted(list(folder.glob("*.ts")),
+                                        key=lambda f: [int(c) if c.isdigit() else c.lower() for c in re.split(r'(\d+)', f.name)])
+                        remaining_ts = [f for f in all_ts if f not in all_part_ts]
+                        if remaining_ts:
+                            is_last = (folder / FILELIST_NAME).exists()
+                            process_live_folder_upscale(folder, proc_folder, is_last=is_last, src_files=remaining_ts)
+                    else:
+                        is_last = (folder / FILELIST_NAME).exists()
+                        process_live_folder_upscale(folder, proc_folder, is_last=is_last)
+
+                # === 步骤 A.2: 检查中途分卷 (如 Part 1, Part 2...) 是否已封包并完成拉伸 ===
+                for folder in group_folders:
+                    proc_folder = PROCESSED_DIR / folder.name
+                    part_files = sorted(list(folder.glob("filelist_part*.txt")),
+                                       key=lambda f: [int(c) if c.isdigit() else c.lower() for c in re.split(r'(\d+)', f.name)])
+                    for pf in part_files:
+                        m = re.search(r'filelist_part(\d+)\.txt', pf.name)
+                        if not m:
+                            continue
+                        part_num = int(m.group(1))
+                        part_key = f"{folder.name}_part{part_num}"
+                        
+                        if part_key in submitted_merges or (proc_folder / f".merged_part{part_num}").exists():
+                            continue
+                        
+                        # 若总直播已结束 (filelist.txt 存在) 且此分卷是最后一个分卷，交由后续步骤 B 处理收尾
+                        is_total_finished = (folder / FILELIST_NAME).exists()
+                        is_latest_part = (part_num == len(part_files))
+                        if is_total_finished and is_latest_part:
+                            continue
+                        
+                        # 检查此分卷的 TS 切片拉伸是否全部就绪
+                        part_ts_list = parse_filelist_txt(pf)
+                        if not part_ts_list:
+                            continue
+                        
+                        # 4C 端防漏传自检：确保该分卷所有切片已在 4C 本地落盘
+                        missing_on_4c = [p for p in part_ts_list if not (folder / p.name).exists()]
+                        if missing_on_4c:
+                            logging.warning(f"⚠️ [4C分卷] {folder.name} Part {part_num} 发现 {len(missing_on_4c)} 个切片尚未同步到 4C (例如 {missing_on_4c[0].name})，等待 3C 补传...")
+                            continue
+                        
+                        part_ts_set = set(get_ss_num_from_path(p) for p in part_ts_list)
+                        last_ss_num = get_ss_num_from_path(part_ts_list[-1])
+                        
+                        processed_mp4s = sorted(list(proc_folder.glob("chunk_*.mp4")),
+                                                key=lambda f: [int(c) if c.isdigit() else c.lower() for c in re.split(r'(\d+)', f.name)])
+                        
+                        part_chunks = []
+                        for mp4 in processed_mp4s:
+                            c_start, c_end = get_chunk_range(mp4)
+                            if c_start in part_ts_set and c_end in part_ts_set:
+                                part_chunks.append(mp4)
+                        
+                        last_chunk_done = any(get_chunk_range(mp4)[1] == last_ss_num for mp4 in part_chunks)
+                        if not last_chunk_done or not part_chunks:
+                            continue
+                        
+                        proc_part_filelist = proc_folder / f"filelist_part{part_num}.txt"
+                        with open(proc_part_filelist, "w", encoding="utf-8") as f:
+                            for c in part_chunks:
+                                f.write(f"file '{c.resolve()}'\n")
+                        
+                        part_name = f"{folder.name} (Part {part_num})"
+                        logging.info(f"📋 [4C分卷] 中途分卷 Part {part_num} 拉伸完成，提交合并: {part_name}")
+                        custom_item = {
+                            'type': 'single',
+                            'filelist': proc_part_filelist,
+                            'name': part_name,
+                            'folders': [proc_folder, folder],
+                            'is_partial': True
+                        }
+                        merge_queue.put(custom_item)
+                        submitted_merges.add(part_key)
 
                 # === 步骤 B: 检查合并条件 ===
                 is_ready, status_msg = check_group_ready_to_merge(group_folders)
@@ -333,15 +468,75 @@ def main_loop():
                         
                         logging.info(f"📋 [{group_key}] 提交合并任务...")
                         
-                        # 1. 给 Processed 文件夹生成 filelist.txt (Merger 需要)
-                        finalize_upscale_group(group_folders)
+                        # 检查是否有分卷历史
+                        first_incoming = group_folders[0]
+                        existing_part_files = sorted(list(first_incoming.glob("filelist_part*.txt")),
+                                                    key=lambda f: [int(c) if c.isdigit() else c.lower() for c in re.split(r'(\d+)', f.name)])
                         
-                        # 2. 构造指向 Processed 的路径列表
-                        processed_group_folders = [PROCESSED_DIR / f.name for f in group_folders]
-                        
-                        # 3. 放入队列，交给 merger 模块处理
-                        merge_queue.put((group_key, processed_group_folders))
-                        submitted_merges.add(group_key)
+                        if existing_part_files:
+                            # 曾经分卷过，这是收尾分卷
+                            final_part_num = len(existing_part_files)
+                            proc_folder = PROCESSED_DIR / first_incoming.name
+                            
+                            # 防漏传自检：确保收尾分卷所有切片已在 4C 本地落盘
+                            final_ts_files = parse_filelist_txt(existing_part_files[-1])
+                            missing_final = [p for p in final_ts_files if not (first_incoming / p.name).exists()]
+                            if missing_final:
+                                logging.warning(f"⚠️ [4C收尾] {first_incoming.name} 发现 {len(missing_final)} 个切片尚未同步到 4C (例如 {missing_final[0].name})，等待 3C 补传...")
+                                continue
+                            
+                            # 提取所有前序分卷的切片序号集合
+                            all_prev_ts_nums = set()
+                            if final_part_num > 1:
+                                for prev_pf in existing_part_files[:-1]:
+                                    for p in parse_filelist_txt(prev_pf):
+                                        all_prev_ts_nums.add(get_ss_num_from_path(p))
+                            
+                            # 收集属于收尾分卷的所有 chunk (其起始切片不属于任何前序分卷)
+                            processed_mp4s = sorted(list(proc_folder.glob("chunk_*.mp4")),
+                                                    key=lambda f: [int(c) if c.isdigit() else c.lower() for c in re.split(r'(\d+)', f.name)])
+                            final_chunks = [mp4 for mp4 in processed_mp4s if get_chunk_range(mp4)[0] not in all_prev_ts_nums]
+                            
+                            if not final_chunks:
+                                # 无新切片，直接打 .merged 标记结束
+                                (proc_folder / ".merged").touch(exist_ok=True)
+                                (first_incoming / ".merged").touch(exist_ok=True)
+                                logging.info(f"[{group_key}] 收尾分卷无新切片，直接标记完成")
+                                submitted_merges.add(group_key)
+                            else:
+                                proc_final_filelist = proc_folder / f"filelist_part{final_part_num}.txt"
+                                with open(proc_final_filelist, "w", encoding="utf-8") as f:
+                                    for c in final_chunks:
+                                        f.write(f"file '{c.resolve()}'\n")
+                                
+                                part_name = f"{first_incoming.name} (Part {final_part_num})"
+                                custom_item = {
+                                    'type': 'single',
+                                    'filelist': proc_final_filelist,
+                                    'name': part_name,
+                                    'folders': [proc_folder, first_incoming],
+                                    'is_partial': False  # 收尾分卷打 .merged 标记
+                                }
+                                merge_queue.put(custom_item)
+                                submitted_merges.add(group_key)
+                        else:
+                            # 正常未分卷直播，先进行防漏传核验
+                            all_missing = []
+                            for g_folder in group_folders:
+                                sig_file = g_folder / FILELIST_NAME
+                                if sig_file.exists():
+                                    folder_ts = parse_filelist_txt(sig_file)
+                                    missing_in_folder = [p for p in folder_ts if not (g_folder / p.name).exists()]
+                                    all_missing.extend(missing_in_folder)
+                            if all_missing:
+                                logging.warning(f"⚠️ [4C收尾] {group_key} 发现 {len(all_missing)} 个切片尚未同步到 4C (例如 {all_missing[0].name})，等待 3C 补传...")
+                                continue
+
+                            # 100% 保持原有流程
+                            finalize_upscale_group(group_folders)
+                            processed_group_folders = [PROCESSED_DIR / f.name for f in group_folders]
+                            merge_queue.put((group_key, processed_group_folders))
+                            submitted_merges.add(group_key)
                         
                     else:
                         subtitle_check_count[group_key] += 1

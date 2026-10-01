@@ -71,6 +71,7 @@ setup_logger()
 # 导入依赖
 # ============================================================
 import time
+import hashlib
 import logging
 import cx_Oracle
 import subprocess
@@ -288,6 +289,66 @@ def has_new_ts_files(member_id: str, started_at_unix: int) -> bool:
         f"已 {time_since_last_write:.0f} 秒未更新，超过 {FILE_INACTIVITY_THRESHOLD} 秒"
     )
     return False
+
+def is_ghost_recording(folder: Path, member_id: str = "") -> bool:
+    """
+    检测是否陷入 HLS 切片死循环（幽灵录制）。
+    结合局部哈希校验与特定的错误特征码(ZZZZZ)检测。
+    """
+    prefix = f"{member_id}: " if member_id else ""
+    try:
+        # 获取最新的 3 个 .ts 文件
+        ts_files = sorted(folder.glob("*.ts"), key=lambda f: f.stat().st_mtime, reverse=True)
+        if len(ts_files) < 3:
+            return False  # 文件太少，可能是刚开播或刚下播的正常花絮，不干预
+
+        latest_files = ts_files[:3]
+        hashes = []
+
+        for file_path in latest_files:
+            # 策略 A：局部哈希对比 (避开文件头部的时间戳，只比对核心画面数据)
+            try:
+                with open(file_path, "rb") as f:
+                    # 跳过前 10KB，读取中间 100KB
+                    f.seek(10240)
+                    chunk = f.read(102400)
+                    
+                    if not chunk:
+                        f.seek(0)
+                        chunk = f.read()
+                        
+                    file_hash = hashlib.md5(chunk).hexdigest()
+                    hashes.append(file_hash)
+            except (OSError, IOError) as fe:
+                logging.debug(f"{prefix}读取切片 {file_path.name} 失败: {fe}")
+                return False
+
+        # 如果最新 3 个文件的核心数据块完全一样，说明陷入死循环
+        if len(set(hashes)) == 1:
+            logging.warning(f"{prefix}检测到幽灵录制：最新 3 个 .ts 文件核心数据完全重复！")
+            return True
+        
+        # 策略 B：特征码检测 (针对 FFmpeg 无效流产生的 ZZZZZ 填充)
+        try:
+            with open(latest_files[0], "rb") as f:
+                f.seek(0, 2)
+                file_size = f.tell()
+                seek_pos = max(0, file_size - 5000)
+                f.seek(seek_pos)
+                tail_data = f.read()
+                
+                if b'ZZZZZZZZZZZZZZZZZZZZ' in tail_data:
+                    logging.warning(f"{prefix}检测到幽灵录制：发现无效的 ZZZZZ 填充数据！")
+                    return True
+        except (OSError, IOError) as fe:
+            logging.debug(f"{prefix}读取切片尾部失败: {fe}")
+            return False
+
+        return False
+        
+    except Exception as e:
+        logging.error(f"{prefix}执行幽灵录制检测时发生异常: {e}")
+        return False
 
 def start_recording_process(member_id: str):
     """启动录制进程（无频率限制）"""
@@ -539,6 +600,26 @@ def handle_running_process(member_id: str, proc: psutil.Process, live_status: di
     # ============================================================
     else:
         time_since_live = current_time - info.get('last_live', current_time)
+        
+        # 下播后的幽灵录制检测：若下播后依然在频繁写入切片，检测是否陷入 HLS 死循环
+        folder = get_latest_subfolder(member_id)
+        if folder:
+            try:
+                ts_files = list(folder.glob("*.ts"))
+                if ts_files:
+                    latest_ts = max(ts_files, key=lambda f: f.stat().st_mtime)
+                    time_since_last_write = current_time - latest_ts.stat().st_mtime
+                    
+                    # 如果下播后，文件依然在频繁更新 (2 分钟内有新写入)
+                    if time_since_last_write < 120:
+                        if is_ghost_recording(folder, member_id):
+                            logging.critical(f"{member_id}: 判定为无效的 HLS 死循环，直接终止进程打断幽灵录制！")
+                            stop_recording_process(member_id, graceful=False)
+                            return
+                        else:
+                            logging.debug(f"{member_id}: 下播后仍在写入但非幽灵录制，保留观察...")
+            except Exception as e:
+                logging.error(f"{member_id}: 检查下播后幽灵录制状态时发生错误: {e}")
         
         # 区分接管进程和已确认正常的进程
         if info.get('is_adopted', False):

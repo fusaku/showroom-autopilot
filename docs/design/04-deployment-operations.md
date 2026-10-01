@@ -7,13 +7,14 @@
 | 环境/角色 | 预期入口 | 需要核实 |
 |---|---|---|
 | 检测角色，主机待确认 | monitor/monitor_showroom.py | INSTANCE_ID、分片与成员参数、启动账号 |
-| 3C 录制管理 | recorder/showroom-smart-start.py | 对应实例、外部抓流路径、进程所有者 |
+| 1C 流式中转代理 | systemd: squid | 端口 8101~8130，禁用缓存/日志，仅放行内网 |
+| 3C 录制管理 | recorder/showroom-smart-start.py | 对应实例、外部抓流路径、进程所有者、代理开关 |
 | 特定成员服务恢复 | recorder/restart_handler.py | 是否启用、成员、对应 showroom-成员.service |
 | 3C 校验 | recorder/checker.py | TS/字幕目录、同步模式 |
 | 4C 加工 | recorder/checker_4c.py | incoming/processed/merged、资源限制 |
 | 公共上传发布 | recorder/upload_youtube.py 等 | 自动触发或独立调度、账号、发布目录 |
 
-源码中的 `merger.upload_if_needed()` 有上传子进程启动路径。不能在未检查现有调度前再加一份上传常驻服务。
+源码中的 `merger.upload_if_needed()` 有上传子进程启动路径。不能在未检查现有调度前再加一份上传常驻服务。1C Squid 代理作为可选流式转发基础设施，由 3C 具备 0.05 秒连通性探针及自动降级兜底，代理离线不影响录制主链基本运行。
 
 ## 路径与依赖
 

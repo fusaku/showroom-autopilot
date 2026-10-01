@@ -266,36 +266,63 @@ class RemoteSyncer:
         if not path_obj.exists():
             return
 
-        # 1. --- 审计阶段 (Audit Phase) ---
+        # 1. --- 审计与批量补传阶段 (Audit & Batch Sync Phase) ---
         try:
+            folder_name = path_obj.parent.name
+            local_folder = path_obj.parent
+            remote_base = str(REMOTE_VIDEO_DIR).rstrip('/') + '/'
+            remote_folder_path = f"{remote_base}{folder_name}/"
+            
+            # 提取清单中的所有切片文件名
+            ts_filenames = []
             with open(path_obj, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
+                for line in f:
+                    line = line.strip()
+                    if line.startswith('file ') and "'" in line:
+                        parts = line.split("'")
+                        if len(parts) >= 2:
+                            ts_file = Path(parts[1])
+                            if (local_folder / ts_file.name).exists():
+                                ts_filenames.append(ts_file.name)
 
-            for line in lines:
-                line = line.strip()
-                if line.startswith('file ') and "'" in line:
-                    parts = line.split("'")
-                    if len(parts) >= 2:
-                        ts_path_str = parts[1]
-                        ts_path_obj = Path(ts_path_str)
-                        
-                        if not ts_path_obj.is_absolute():
-                            ts_path_obj = path_obj.parent / ts_path_str
-                            ts_path_str = str(ts_path_obj)
-
-                        # 【补漏逻辑】
-                        if ts_path_str.endswith('.ts') and \
-                           ts_path_str not in self.synced_set and \
-                           ts_path_obj.exists():
-                            
-                            logging.info(f"🕵️ [Audit] 补传: {ts_path_obj.name}")
-                            # 调用自身同步
-                            self.sync_to_4c(ts_path_obj, member_id)
+            if ts_filenames and REMOTE_IP and REMOTE_PORT:
+                # 写入临时清单文件，供 rsync --files-from 一次性批量校验
+                tmp_filelist = local_folder / f".tmp_audit_{path_obj.stem}.txt"
+                with open(tmp_filelist, 'w', encoding='utf-8') as f:
+                    for name in ts_filenames:
+                        f.write(f"{name}\n")
+                
+                ssh_opts = f"ssh -p {REMOTE_PORT} -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o ControlMaster=auto -o ControlPath=/tmp/ssh_mux_%h_%p_%r -o ControlPersist=5m"
+                safe_remote_mkdir_dir = shlex.quote(remote_folder_path)
+                remote_mkdir_cmd = f"mkdir -p {safe_remote_mkdir_dir} && rsync"
+                
+                # 使用 rsync --files-from 进行全量校验与增量补漏传输
+                # --ignore-existing: 4C 已有的切片毫秒级跳过，只传输 4C 缺失或损坏的切片
+                cmd = [
+                    "rsync", "-az", "--ignore-existing", "--partial",
+                    "--timeout=60",
+                    "-e", ssh_opts,
+                    "--rsync-path", remote_mkdir_cmd,
+                    f"--files-from={tmp_filelist}",
+                    f"{local_folder}/",
+                    f"ubuntu@{REMOTE_IP}:{remote_folder_path}"
+                ]
+                
+                logging.info(f"🕵️ [Audit] 正在对 4C 执行切片清单核对与批量补漏 ({path_obj.name}, 共 {len(ts_filenames)} 个文件)...")
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+                tmp_filelist.unlink(missing_ok=True)
+                
+                if res.returncode == 0:
+                    logging.info(f"✅ [Audit] 4C 切片 100% 核对与补传完毕: {path_obj.name}")
+                    for name in ts_filenames:
+                        self.synced_set.add(str(local_folder / name))
+                else:
+                    logging.warning(f"⚠️ [Audit] 补漏传输警告: {res.stderr.strip()}")
 
         except Exception as e:
             logging.error(f"⚠️ [Audit] 审计异常 {path_obj.name}: {e}")
 
-        # 2. --- 最后上传 filelist 本身 ---
+        # 2. --- 只有切片审计补漏完毕后，才上传清单文件本身作为触发信号 ---
         self.sync_to_4c(filelist_path, member_id)
 
     def sync_subtitles(self):

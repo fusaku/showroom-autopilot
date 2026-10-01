@@ -52,15 +52,17 @@ def convert_title_to_japanese(title: str) -> str:
     converted_title = title
     
     # 2. 使用正则表达式拆分文件名
-    # ^(.*? \- ) : 匹配开头直到 " - "（捕获日期和平台）
-    # (.*)        : 匹配中间的所有内容（包含队伍信息和英文名）
-    # \s(\d{6})$  : 匹配结尾前的空格 + 6位数字时间戳
-    match = re.match(r"^(.*? \- )(.*)\s(\d{6})$", title)
+    # ^(.*? \- )                         : 匹配开头直到 " - "（捕获日期和平台）
+    # (.*?)                              : 匹配中间的所有内容（包含队伍信息和英文名）
+    # \s(\d{6})                          : 匹配结尾前的空格 + 6位数字时间戳
+    # (\s*(?:\(Part\s*\d+\)|_part\d+))?$ : 匹配可选的分卷后缀如 " (Part 1)"
+    match = re.match(r"^(.*? \- )(.*?)\s(\d{6})(\s*(?:\(Part\s*\d+\)|_part\d+))?$", title)
     
     if match:
-        prefix = match.group(1)      # 例如: "251227 Showroom - "
-        middle_content = match.group(2) # 例如: "AKB48 Draft 3rd Gen Kudo Kasumi"
-        timestamp = match.group(3)   # 例如: "221745"
+        prefix = match.group(1)          # 例如: "251227 Showroom - "
+        middle_content = match.group(2)     # 例如: "AKB48 Draft 3rd Gen Kudo Kasumi"
+        timestamp = match.group(3)       # 例如: "221745"
+        part_suffix = match.group(4) or "" # 例如: " (Part 1)"
 
         # 3. 在中间内容中匹配成员
         for member in ENABLED_MEMBERS:
@@ -76,7 +78,7 @@ def convert_title_to_japanese(title: str) -> str:
                 else:
                     new_middle = jp_name
                 
-                converted_title = f"{prefix}{new_middle} {timestamp}"
+                converted_title = f"{prefix}{new_middle} {timestamp}{part_suffix}"
                 logging.debug(f"成功转换标题: {title} -> {converted_title}")
                 break # 匹配到成员后跳出循环
 

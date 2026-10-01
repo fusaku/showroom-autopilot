@@ -132,8 +132,19 @@ def group_folders_by_member(folders):
                     # 如果时间差小于5分钟(300秒),认为是同一场直播
                     # 正常情况下ts文件每2秒一个,5分钟已经很宽松了
                     if time_gap < 300:
-                        current_group.append(folder)
-                        logging.debug(f"文件夹 {folder.name} 与前一个文件夹ts时间差 {time_gap:.0f}秒,判定为同一场直播")
+                        # 检查当前组累计的切片数量是否已达单卷上限
+                        group_ts_count = sum(len(list(f.glob("*.ts"))) for f in current_group)
+                        if group_ts_count >= MAX_TS_FILES_PER_PART:
+                            logging.info(f"文件夹 {folder.name} 虽然在5分钟内，但组内切片已达 {group_ts_count} 片，开启新分卷组")
+                            first_folder = current_group[0]
+                            date_part = first_folder.name[:6]
+                            key = f"{date_part}_{member_id}_{group_index}"
+                            groups[key] = current_group
+                            group_index += 1
+                            current_group = [folder]
+                        else:
+                            current_group.append(folder)
+                            logging.debug(f"文件夹 {folder.name} 与前一个文件夹ts时间差 {time_gap:.0f}秒,判定为同一场直播")
                     else:
                         # 时间差太大,说明是新的直播
                         logging.info(f"文件夹 {folder.name} 与前一个文件夹ts时间差 {time_gap:.0f}秒,判定为新直播")
@@ -511,7 +522,7 @@ def check_live_folder_incremental(ts_dir: Path, checked_files: set, valid_files:
                 error_logs.append(err_msg)
 
 
-def finalize_live_check(ts_dir: Path, checked_files: set, valid_files: list, error_logs: list):
+def finalize_live_check(ts_dir: Path, checked_files: set, valid_files: list, error_logs: list, part_index: int = 1):
     """直播结束后的最终检查和文件列表生成"""
     base_name = ts_dir.name
     filelist_txt = ts_dir / FILELIST_NAME
@@ -560,6 +571,19 @@ def finalize_live_check(ts_dir: Path, checked_files: set, valid_files: list, err
             f.write(f"# No valid .ts files found. Marked as checked at {datetime.now()}\n")
             logging.debug(f"[{base_name}] 没有有效的 .ts 文件，已标记为检查完成。")
             result_success = False
+
+    # 若该直播曾触发过分卷，为收尾分卷额外写入对应的 filelist_partX.txt 并同步
+    if part_index > 1 and valid_files:
+        filelist_part_txt = ts_dir / f"filelist_part{part_index}.txt"
+        with open(filelist_part_txt, "w", encoding="utf-8") as f:
+            for vf in valid_files:
+                f.write(f"file '{vf.resolve()}'\n")
+        try:
+            member_id = extract_member_name_from_folder(ts_dir.name)
+            syncer.sync_filelist_and_audit(filelist_part_txt, member_id=member_id)
+            logging.info(f"📡 [信号发送] 已同步收尾分卷 {filelist_part_txt.name} 到 4C: {ts_dir.name}")
+        except Exception as e:
+            logging.error(f"❌ 同步收尾分卷清单失败: {e}")
     
     # 目的：把刚才生成的 filelist.txt 传给 4C，作为“结束信号”
     try:
@@ -598,21 +622,89 @@ def finalize_live_check(ts_dir: Path, checked_files: set, valid_files: list, err
 
 # ========================= 文件夹处理逻辑 =========================
 
+def trigger_partial_merge(ts_dir: Path, state: dict):
+    """
+    当录制中的有效 TS 切片达到分卷上限（如 15000 片）时，提前封包合并上传。
+    录制进程完全不重启，后续新切片作为下一分卷从头累积。
+    """
+    base_name = ts_dir.name
+    part_num = state.get('part_index', 1)
+    
+    # 提取前 MAX_TS_FILES_PER_PART 个切片，剩下的切片保留在列表中留给下一分卷
+    part_files = state['valid_files'][:MAX_TS_FILES_PER_PART]
+    state['valid_files'] = state['valid_files'][MAX_TS_FILES_PER_PART:]
+    state['part_index'] = part_num + 1
+    
+    part_files.sort(key=lambda f: [int(c) if c.isdigit() else c.lower() for c in re.split(r'(\d+)', f.name)])
+    
+    # 写入分卷清单文件 (filelist_partX.txt)
+    filelist_part_txt = ts_dir / f"filelist_part{part_num}.txt"
+    with open(filelist_part_txt, "w", encoding="utf-8") as f:
+        for vf in part_files:
+            f.write(f"file '{vf.resolve()}'\n")
+            
+    logging.info(f"📦 [{base_name}] 达到 {MAX_TS_FILES_PER_PART} 切片上限，提前封包生成 Part {part_num} 清单 ({len(part_files)} 个文件)")
+    
+    # 同步分卷信号到 4C（如果配置了 4C 同步）
+    try:
+        member_id = extract_member_name_from_folder(base_name)
+        syncer.sync_filelist_and_audit(filelist_part_txt, member_id=member_id)
+        logging.info(f"📡 [信号发送] 已同步分卷清单 {filelist_part_txt.name} 到 4C: {base_name}")
+    except Exception as e:
+        logging.error(f"❌ 同步分卷清单失败: {e}")
+        
+    # 构造分卷任务提交到合并队列
+    part_name = f"{base_name} (Part {part_num})"
+    merged_video = OUTPUT_DIR / f"{part_name}{OUTPUT_EXTENSION}"
+    
+    if not merged_video.exists():
+        merge_item = {
+            'type': 'single',
+            'filelist': filelist_part_txt,
+            'name': part_name,
+            'folders': [ts_dir],
+            'is_partial': True
+        }
+        logging.info(f"📋 直播组 {base_name} 分卷 Part {part_num} 加入合并队列 (当前队列: {merge_queue.qsize()} 个任务)")
+        merge_queue.put(merge_item)
+    else:
+        logging.warning(f"⏭️  直播组 {base_name} 分卷 {part_name} 合并文件已存在，跳过")
+
+
 def process_single_folder(ts_dir: Path, folder_states: dict, all_folders: list, current_time: float):
     """处理单个文件夹的检查逻辑"""
     base_name = ts_dir.name
     
     # 初始化文件夹状态
     if ts_dir not in folder_states:
+        existing_parts = sorted(list(ts_dir.glob("filelist_part*.txt")),
+                                key=lambda f: [int(c) if c.isdigit() else c.lower() for c in re.split(r'(\d+)', f.name)])
+        recovered_part = len(existing_parts) + 1 if existing_parts else 1
+        existing_checked = set()
+        for pf in existing_parts:
+            try:
+                with open(pf, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith("file '") and line.endswith("'"):
+                            fname = Path(line[6:-1]).name
+                            existing_checked.add(ts_dir / fname)
+                            existing_checked.add(Path(line[6:-1]))
+            except Exception:
+                pass
+
         folder_states[ts_dir] = {
-            'checked_files': set(),
+            'checked_files': existing_checked,
             'valid_files': [],
             'error_logs': [],
             'last_check': 0,
-            'creation_time': current_time
+            'creation_time': current_time,
+            'part_index': recovered_part
         }
     
     state = folder_states[ts_dir]
+    if 'part_index' not in state:
+        state['part_index'] = 1
     
     # 检查是否已经完成检查
     if has_been_merged(ts_dir):
@@ -636,6 +728,10 @@ def process_single_folder(ts_dir: Path, folder_states: dict, all_folders: list, 
             state['error_logs']
         )
         state['last_check'] = current_time
+
+        # === 核心分卷机制：检查是否已达到分卷切片上限（如 15000 片） ===
+        if len(state['valid_files']) >= MAX_TS_FILES_PER_PART:
+            trigger_partial_merge(ts_dir, state)
     else:
         remaining = LIVE_CHECK_INTERVAL - (current_time - state['last_check'])
         logging.debug(f"文件夹 {base_name} 等待 {remaining:.0f} 秒后进行下次检查")
@@ -672,6 +768,25 @@ def merge_worker():
             if task is None:  # None 是停止信号
                 logging.info("合并工作线程收到停止信号")
                 break
+
+            if isinstance(task, dict):
+                # 自定义任务 (如分卷合并)
+                item = task
+                task_name = item.get('name', 'unknown')
+                try:
+                    logging.info(f"🔄 [合并队列] 开始自定义/分卷合并: {task_name}")
+                    merged_video = OUTPUT_DIR / f"{task_name}{OUTPUT_EXTENSION}"
+                    if not merged_video.exists():
+                        merge_once(custom_item=item)
+                        logging.info(f"✅ [合并队列] 完成: {task_name}")
+                    else:
+                        logging.warning(f"⏭️  [合并队列] 文件已存在，跳过: {task_name}")
+                except Exception as e:
+                    logging.error(f"❌ [合并队列] 失败 {task_name}: {e}")
+                    logging.error(traceback.format_exc())
+                finally:
+                    merge_queue.task_done()
+                continue
             
             group_key, group_folders = task
             
@@ -802,25 +917,64 @@ def main_loop():
                             logging.info(f"对已结束的直播进行最终检查: {ts_dir.name}")
                             # 确保 folder_states 中有该文件夹的状态
                             if ts_dir not in folder_states:
-                                folder_states[ts_dir] = {'checked_files': set(), 'valid_files': [], 'error_logs': []}
+                                existing_parts = sorted(list(ts_dir.glob("filelist_part*.txt")),
+                                                        key=lambda f: [int(c) if c.isdigit() else c.lower() for c in re.split(r'(\d+)', f.name)])
+                                recovered_part = len(existing_parts) + 1 if existing_parts else 1
+                                folder_states[ts_dir] = {
+                                    'checked_files': set(),
+                                    'valid_files': [],
+                                    'error_logs': [],
+                                    'part_index': recovered_part
+                                }
                             
+                            part_index = folder_states[ts_dir].get('part_index', 1)
                             finalize_live_check(
                                 ts_dir,
                                 folder_states[ts_dir]['checked_files'],
                                 folder_states[ts_dir]['valid_files'],
-                                folder_states[ts_dir]['error_logs']
+                                folder_states[ts_dir]['error_logs'],
+                                part_index=part_index
                             )
                     # (B) 合并该组 - 提交到合并队列
                     if all(has_been_merged(f) for f in group_folders):
                         earliest_folder = min(group_folders, key=lambda x: x.stat().st_ctime)
-                        merged_video = OUTPUT_DIR / f"{earliest_folder.name}{OUTPUT_EXTENSION}"
-
-                        if not merged_video.exists():
-                            logging.info(f"📋 直播组 {group_key} 已完成检查，加入合并队列 (当前队列: {merge_queue.qsize()} 个任务)")
-                            merge_queue.put((group_key, group_folders))
-                            submitted_merges.add(group_key)  # 标记为已提交
+                        max_part_index = max((folder_states.get(f, {}).get('part_index', 1) for f in group_folders), default=1)
+                        
+                        if max_part_index > 1:
+                            # 曾经分卷过，这是收尾分卷
+                            filelist_to_use = earliest_folder / f"filelist_part{max_part_index}.txt"
+                            if not filelist_to_use.exists():
+                                # 收尾分卷无新切片，直接打 .merged 标记
+                                (earliest_folder / ".merged").touch(exist_ok=True)
+                                logging.info(f"直播组 {group_key} 收尾分卷无新切片，直接标记完成")
+                                submitted_merges.add(group_key)
+                            else:
+                                part_name = f"{earliest_folder.name} (Part {max_part_index})"
+                                merged_video = OUTPUT_DIR / f"{part_name}{OUTPUT_EXTENSION}"
+                                if not merged_video.exists():
+                                    if group_key not in submitted_merges:
+                                        logging.info(f"📋 直播组 {group_key} (收尾 Part {max_part_index}) 加入合并队列 (当前队列: {merge_queue.qsize()} 个任务)")
+                                        item = {
+                                            'type': 'single' if len(group_folders) == 1 else 'merged',
+                                            'filelist': filelist_to_use,
+                                            'name': part_name,
+                                            'folders': group_folders,
+                                            'is_partial': False  # 收尾分卷，写入 .merged 标记
+                                        }
+                                        merge_queue.put(item)
+                                        submitted_merges.add(group_key)
+                                else:
+                                    logging.warning(f"⏭️  直播组 {group_key} (Part {max_part_index}) 合并文件已存在，跳过")
                         else:
-                            logging.warning(f"⏭️  直播组 {group_key} 合并文件已存在，跳过")
+                            merged_video = OUTPUT_DIR / f"{earliest_folder.name}{OUTPUT_EXTENSION}"
+
+                            if not merged_video.exists():
+                                if group_key not in submitted_merges:
+                                    logging.info(f"📋 直播组 {group_key} 已完成检查，加入合并队列 (当前队列: {merge_queue.qsize()} 个任务)")
+                                    merge_queue.put((group_key, group_folders))
+                                    submitted_merges.add(group_key)  # 标记为已提交
+                            else:
+                                logging.warning(f"⏭️  直播组 {group_key} 合并文件已存在，跳过")
 
                 # 4. 如果仍在直播/文件活跃，则继续执行增量检查
                 elif group_is_streaming or group_files_active:

@@ -85,6 +85,7 @@ FINAL_INACTIVE_THRESHOLD = 60  # 1分钟文件无活动才确认结束（秒）
 PROCESS_ALL_FOLDERS = True  # 是否处理所有文件夹（True）还是只处理最新的（False）
 MAX_CONCURRENT_FOLDERS_PER_LIVE = 50  # 最大同时处理的文件夹数量（防止内存占用过多）
 FOLDER_CLEANUP_DELAY = 120  # 完成的文件夹状态保留时间（秒），防止重复处理
+MAX_TS_FILES_PER_PART = 15000  # 单个视频分卷最大 TS 切片数（约 4 小时 10 分钟，达到后提前封包合并上传）
 
 # ============================================================
 # 4. 视频合并与字幕配置 (FFmpeg/FFprobe)
