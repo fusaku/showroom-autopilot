@@ -109,7 +109,7 @@ def group_folders_by_member(folders):
                         # 保存当前组并开始新组
                         first_folder = current_group[0]
                         date_part = first_folder.name[:6]
-                        key = f"{date_part}_{member_id}_{group_index}"
+                        key = f"{date_part}_{member_id}_{group_index}_{int(first_folder.stat().st_ctime)}"
                         groups[key] = current_group
                         group_index += 1
                         current_group = [folder]
@@ -138,7 +138,7 @@ def group_folders_by_member(folders):
                             logging.info(f"文件夹 {folder.name} 虽然在5分钟内，但组内切片已达 {group_ts_count} 片，开启新分卷组")
                             first_folder = current_group[0]
                             date_part = first_folder.name[:6]
-                            key = f"{date_part}_{member_id}_{group_index}"
+                            key = f"{date_part}_{member_id}_{group_index}_{int(first_folder.stat().st_ctime)}"
                             groups[key] = current_group
                             group_index += 1
                             current_group = [folder]
@@ -152,7 +152,7 @@ def group_folders_by_member(folders):
                         # 保存当前组
                         first_folder = current_group[0]
                         date_part = first_folder.name[:6]
-                        key = f"{date_part}_{member_id}_{group_index}"
+                        key = f"{date_part}_{member_id}_{group_index}_{int(first_folder.stat().st_ctime)}"
                         groups[key] = current_group
                         
                         # 开始新组
@@ -166,7 +166,7 @@ def group_folders_by_member(folders):
                     else:
                         first_folder = current_group[0]
                         date_part = first_folder.name[:6]
-                        key = f"{date_part}_{member_id}_{group_index}"
+                        key = f"{date_part}_{member_id}_{group_index}_{int(first_folder.stat().st_ctime)}"
                         groups[key] = current_group
                         group_index += 1
                         current_group = [folder]
@@ -175,7 +175,7 @@ def group_folders_by_member(folders):
         if current_group:
             first_folder = current_group[0]
             date_part = first_folder.name[:6]
-            key = f"{date_part}_{member_id}_{group_index}"
+            key = f"{date_part}_{member_id}_{group_index}_{int(first_folder.stat().st_ctime)}"
             groups[key] = current_group
     
     return groups
@@ -863,6 +863,9 @@ def main_loop():
                     grouped = {}  # 空字典
 
             if not all_folders:
+                cleanup_old_folder_states(folder_states, all_folders, current_time)
+                subtitle_check_count.clear()
+                submitted_merges.clear()
                 logging.debug("未找到直播文件夹,等待中...")
                 time.sleep(CHECK_INTERVAL)
                 continue
@@ -963,6 +966,8 @@ def main_loop():
                                         }
                                         merge_queue.put(item)
                                         submitted_merges.add(group_key)
+                                    else:
+                                        logging.warning(f"⚠️ 直播组 {group_key} (收尾 Part {max_part_index}) 已在合并队列中，跳过重复提交")
                                 else:
                                     logging.warning(f"⏭️  直播组 {group_key} (Part {max_part_index}) 合并文件已存在，跳过")
                         else:
@@ -973,6 +978,8 @@ def main_loop():
                                     logging.info(f"📋 直播组 {group_key} 已完成检查，加入合并队列 (当前队列: {merge_queue.qsize()} 个任务)")
                                     merge_queue.put((group_key, group_folders))
                                     submitted_merges.add(group_key)  # 标记为已提交
+                                else:
+                                    logging.warning(f"⚠️ 直播组 {group_key} 已在合并队列中，跳过重复提交")
                             else:
                                 logging.warning(f"⏭️  直播组 {group_key} 合并文件已存在，跳过")
 
@@ -996,9 +1003,11 @@ def main_loop():
             for key in keys_to_remove:
                 logging.debug(f"清理字幕计数器中已完成/不活跃的组: {key}")
                 del subtitle_check_count[key]
-                # 同时清理已提交的合并记录
-                if key in submitted_merges:
-                    submitted_merges.discard(key)
+            
+            # 清理不再活跃的合并记录
+            stale_merges = [key for key in submitted_merges if key not in active_group_keys]
+            for key in stale_merges:
+                submitted_merges.discard(key)
             
             time.sleep(CHECK_INTERVAL)
             
