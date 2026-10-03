@@ -79,6 +79,20 @@ def group_folders_by_member(folders):
 def extract_member_name_from_folder(folder_name: str):
     """【逻辑复用】提取 Member ID"""
     try:
+        # 1. 优先尝试从已启用的成员配置中精准匹配 (处理官方号、特别频道等多词ID)
+        for m in sorted(ENABLED_MEMBERS, key=lambda x: len(x.get('name_en', '')), reverse=True):
+            m_id = m.get('id', '')
+            m_en = m.get('name_en', '')
+            m_jp = m.get('name_jp', '')
+            
+            if m_en and m_en.lower() in folder_name.lower():
+                return m_id
+            if m_jp and m_jp in folder_name:
+                return m_id
+            if m_id and m_id.lower() in folder_name.lower():
+                return m_id
+
+        # 2. 如果配置中未命中，回退到按单词切分的启发式规则
         parts = folder_name.split(" - ")
         if len(parts) >= 2:
             name_parts = parts[1].split()

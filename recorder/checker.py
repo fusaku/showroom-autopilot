@@ -353,7 +353,21 @@ def read_is_live(member_id: str):
 def extract_member_name_from_folder(folder_name: str) -> Optional[str]:
     """从文件夹名称中提取人名部分，用于模糊匹配数据库中的 member_id"""
     try:
-        # 文件夹格式: "日期 Showroom - 团队信息 人名 时间戳"
+        # 1. 优先尝试从已启用的成员配置中精准匹配 (处理官方号、特别频道等多词ID)
+        # 按英文名长度倒序，优先匹配长名称
+        for m in sorted(ENABLED_MEMBERS, key=lambda x: len(x.get('name_en', '')), reverse=True):
+            m_id = m.get('id', '')
+            m_en = m.get('name_en', '')
+            m_jp = m.get('name_jp', '')
+            
+            if m_en and m_en.lower() in folder_name.lower():
+                return m_id
+            if m_jp and m_jp in folder_name:
+                return m_id
+            if m_id and m_id.lower() in folder_name.lower():
+                return m_id
+
+        # 2. 如果配置中未命中，回退到按单词切分的启发式规则
         parts = folder_name.split(" - ")
         if len(parts) >= 2:
             # parts[1] 应该是 "AKB48 Team 8 Hashimoto Haruna 233156"
